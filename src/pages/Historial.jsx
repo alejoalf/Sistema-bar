@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Container, Card, Row, Col, Badge, Button, Offcanvas, ListGroup } from 'react-bootstrap';
+import { Container, Card, Row, Col, Badge, Button, Offcanvas, ListGroup, Spinner } from 'react-bootstrap';
 import { FileText, DollarSign, CheckCircle, Calendar, RefreshCw, X, ShoppingBag } from 'lucide-react';
 import { getHistorialVentas } from '../services/pedidos';
 
@@ -9,16 +9,23 @@ const Historial = () => {
   const [pedidoSeleccionado, setPedidoSeleccionado] = useState(null);
   const [showSidebar, setShowSidebar] = useState(false);
 
+  // 1. DEFINIMOS LA FUNCIÓN PRIMERO (Para evitar errores de referencia)
+  const cargarHistorial = async () => {
+    setLoading(true);
+    try {
+      const data = await getHistorialVentas();
+      setVentas(data);
+    } catch (error) {
+      console.error("Error al cargar historial:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 2. LUEGO USAMOS EL EFECTO
   useEffect(() => {
     cargarHistorial();
   }, []);
-
-  const cargarHistorial = async () => {
-    setLoading(true);
-    const data = await getHistorialVentas();
-    setVentas(data);
-    setLoading(false);
-  };
 
   const handleVerDetalle = (pedido) => {
     setPedidoSeleccionado(pedido);
@@ -35,7 +42,7 @@ const Historial = () => {
   const totalMesas = ventas.length;
 
   return (
-    <Container fluid className="py-3 py-md-4 px-2 px-md-4" style={{ backgroundColor: '#f8f9fa' }}>
+    <Container fluid className="py-3 py-md-4 px-2 px-md-4" style={{ backgroundColor: '#f8f9fa', minHeight: '100vh' }}>
       <style>{`
         .hover-row:hover {
           background-color: #f8f9fa !important;
@@ -64,8 +71,8 @@ const Historial = () => {
             onClick={cargarHistorial}
             disabled={loading}
           >
-            <RefreshCw size={18} className="me-1" />
-            Actualizar
+            {loading ? <Spinner animation="border" size="sm" className="me-1"/> : <RefreshCw size={18} className="me-1" />}
+            {loading ? 'Cargando...' : 'Actualizar'}
           </Button>
         </div>
       </div>
@@ -73,7 +80,7 @@ const Historial = () => {
       {/* Cards de Estadísticas */}
       <Row className="mb-3 mb-md-4 g-2 g-md-3">
         <Col xs={12} sm={6} md={4}>
-          <Card className="border-0 shadow-sm">
+          <Card className="border-0 shadow-sm h-100">
             <Card.Body className="p-3">
               <div className="d-flex justify-content-between align-items-center">
                 <div>
@@ -88,7 +95,7 @@ const Historial = () => {
           </Card>
         </Col>
         <Col xs={12} sm={6} md={4}>
-          <Card className="border-0 shadow-sm">
+          <Card className="border-0 shadow-sm h-100">
             <Card.Body className="p-3">
               <div className="d-flex justify-content-between align-items-center">
                 <div>
@@ -103,7 +110,7 @@ const Historial = () => {
           </Card>
         </Col>
         <Col xs={12} sm={12} md={4}>
-          <Card className="border-0 shadow-sm">
+          <Card className="border-0 shadow-sm h-100">
             <Card.Body className="p-3">
               <div className="d-flex justify-content-between align-items-center">
                 <div>
@@ -136,7 +143,9 @@ const Historial = () => {
                 </tr>
               </thead>
               <tbody>
-                {ventas.length === 0 ? (
+                {loading && ventas.length === 0 ? (
+                    <tr><td colSpan="5" className="text-center py-5">Cargando datos...</td></tr>
+                ) : ventas.length === 0 ? (
                   <tr>
                     <td colSpan="5" className="text-center py-5">
                       <FileText size={48} className="mb-3 opacity-50 text-muted" />

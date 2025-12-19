@@ -103,17 +103,13 @@ export const getHistorialVentas = async () => {
       estado,
       mesas (numero_mesa),
       detalle_pedidos (
-        id,
         cantidad,
         precio_unitario,
-        productos (
-          nombre,
-          categoria
-        )
+        productos (nombre)
       )
     `)
-    .eq('estado', 'cobrado') // Solo ventas cerradas
-    .order('created_at', { ascending: false }); // Lo más nuevo arriba
+    .eq('estado', 'cobrado')
+    .order('created_at', { ascending: false });
 
   if (error) {
     console.error('Error cargando historial:', error);
