@@ -1,32 +1,27 @@
 import React from 'react';
-import { Nav, Dropdown } from 'react-bootstrap'; // Agregamos Dropdown
-import { LayoutDashboard, Coffee, ClipboardList, Settings, LogOut, User } from 'lucide-react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Dropdown } from 'react-bootstrap';
+import { LogOut, User } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useBarStore } from '../../store/useBarStore';
 import { logout } from '../../services/auth';
+import NavigationLinks from './NavigationLinks';
 
 const Sidebar = () => {
-  const location = useLocation();
   const navigate = useNavigate();
-  const user = useBarStore((state) => state.user); // Obtenemos el usuario real
+  const user = useBarStore((state) => state.user);
 
-  const isActive = (path) => location.pathname === path;
-  const linkStyle = "d-flex align-items-center gap-2 px-3 py-2 text-decoration-none rounded mb-1";
-  const activeStyle = "bg-primary text-white";
-  const inactiveStyle = "text-white-50 hover-text-white";
-
-  // Función para cerrar sesión
   const handleLogout = async () => {
     await logout();
-    navigate('/login'); // Nos aseguramos de mandarlo al login
+    navigate('/login');
   };
 
-  // Obtenemos el nombre o email para mostrar (cortamos el email antes del @ para que quede corto)
   const displayName = user?.email ? user.email.split('@')[0] : 'Usuario';
 
   return (
-    <div className="d-flex flex-column flex-shrink-0 p-3 text-white bg-dark" style={{ width: '250px', height: '100vh', position: 'fixed', left: 0, top: 0, zIndex: 1000 }}>
-      
+    <div 
+      className="d-none d-md-flex flex-column flex-shrink-0 p-3 text-white bg-dark" 
+      style={{ width: '250px', height: '100vh', position: 'fixed', left: 0, top: 0, zIndex: 1000 }}
+    >
       {/* --- MARCA --- */}
       <a href="/" className="d-flex align-items-center mb-3 mb-md-0 me-md-auto text-white text-decoration-none">
         <span className="fs-4 fw-bold">HorusBar</span>
@@ -35,17 +30,7 @@ const Sidebar = () => {
       <hr />
       
       {/* --- MENÚ --- */}
-      <Nav className="flex-column mb-auto">
-        <Link to="/" className={`${linkStyle} ${isActive('/') ? activeStyle : inactiveStyle}`}>
-          <LayoutDashboard size={20} /> Salón
-        </Link>
-        <Link to="/cocina" className={`${linkStyle} ${isActive('/cocina') ? activeStyle : inactiveStyle}`}>
-          <Coffee size={20} /> Cocina
-        </Link>
-        <Link to="/admin" className={`${linkStyle} ${isActive('/admin') ? activeStyle : inactiveStyle}`}>
-          <Settings size={20} /> Admin
-        </Link>
-      </Nav>
+      <NavigationLinks />
       
       <hr />
       

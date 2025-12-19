@@ -46,7 +46,6 @@ export const crearPedido = async (mesaId, items, total) => {
     throw error;
   }
 };
-// ... (imports y funciones anteriores)
 
 // Obtener la cuenta actual de la mesa (Pedidos no cobrados)
 export const getCuentaMesa = async (mesaId) => {
@@ -91,4 +90,34 @@ export const cobrarMesa = async (mesaId) => {
     .eq('id', mesaId);
 
   if (errorMesa) throw errorMesa;
+};
+
+// Obtener historial de ventas (Pedidos cobrados)
+export const getHistorialVentas = async () => {
+  const { data, error } = await supabase
+    .from('pedidos')
+    .select(`
+      id,
+      created_at,
+      total,
+      estado,
+      mesas (numero_mesa),
+      detalle_pedidos (
+        id,
+        cantidad,
+        precio_unitario,
+        productos (
+          nombre,
+          categoria
+        )
+      )
+    `)
+    .eq('estado', 'cobrado') // Solo ventas cerradas
+    .order('created_at', { ascending: false }); // Lo más nuevo arriba
+
+  if (error) {
+    console.error('Error cargando historial:', error);
+    return [];
+  }
+  return data;
 };

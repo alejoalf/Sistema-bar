@@ -83,16 +83,16 @@ const Admin = () => {
   };
 
   return (
-    <Container fluid className="py-4 px-4" style={{ backgroundColor: '#f8f9fa' }}>
+    <Container fluid className="py-3 py-md-4 px-2 px-md-4" style={{ backgroundColor: '#f8f9fa' }}>
       {/* Header */}
-      <div className="mb-4">
-        <div className="d-flex justify-content-between align-items-start mb-2">
-          <div>
-            <h2 className="mb-1 fw-bold" style={{ color: '#2d3748' }}>
-              <Package size={28} className="me-2" />
+      <div className="mb-3 mb-md-4">
+        <div className="d-flex flex-column flex-md-row justify-content-between align-items-start mb-2">
+          <div className="mb-3 mb-md-0">
+            <h2 className="mb-1 fw-bold fs-4 fs-md-2" style={{ color: '#2d3748' }}>
+              <Package size={24} className="me-2 d-none d-md-inline" />
               Gestión de Productos
             </h2>
-            <p className="text-muted mb-0">Administra el catálogo completo de productos</p>
+            <p className="text-muted mb-0 small">Administra el catálogo completo de productos</p>
           </div>
           <Button 
             variant="primary" 
@@ -106,8 +106,8 @@ const Admin = () => {
       </div>
 
       {/* Cards de Estadísticas */}
-      <Row className="mb-4">
-        <Col md={4}>
+      <Row className="mb-3 mb-md-4 g-2 g-md-3">
+        <Col xs={12} sm={6} md={4}>
           <Card className="border-0 shadow-sm">
             <Card.Body>
               <div className="d-flex justify-content-between align-items-center">
