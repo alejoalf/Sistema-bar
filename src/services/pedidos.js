@@ -46,3 +46,49 @@ export const crearPedido = async (mesaId, items, total) => {
     throw error;
   }
 };
+// ... (imports y funciones anteriores)
+
+// Obtener la cuenta actual de la mesa (Pedidos no cobrados)
+export const getCuentaMesa = async (mesaId) => {
+  const { data, error } = await supabase
+    .from('pedidos')
+    .select(`
+      id,
+      total,
+      estado,
+      created_at,
+      detalle_pedidos (
+        cantidad,
+        precio_unitario,
+        productos (nombre)
+      )
+    `)
+    .eq('mesa_id', mesaId)
+    .neq('estado', 'cobrado'); // Traer todo lo que NO esté cobrado ya
+
+  if (error) {
+    console.error('Error al traer cuenta:', error);
+    return [];
+  }
+  return data;
+};
+
+// Cobrar mesa 
+export const cobrarMesa = async (mesaId) => {
+  // 1. Marcar pedidos como cobrados
+  const { error: errorPedidos } = await supabase
+    .from('pedidos')
+    .update({ estado: 'cobrado' })
+    .eq('mesa_id', mesaId)
+    .neq('estado', 'cobrado');
+
+  if (errorPedidos) throw errorPedidos;
+
+  // 2. Liberar la mesa 
+  const { error: errorMesa } = await supabase
+    .from('mesas')
+    .update({ estado: 'libre' })
+    .eq('id', mesaId);
+
+  if (errorMesa) throw errorMesa;
+};
