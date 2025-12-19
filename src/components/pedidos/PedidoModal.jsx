@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Modal, Button, Badge, ListGroup, Row, Col } from 'react-bootstrap';
 import { abrirMesa, cerrarMesa } from '../../services/mesas';
 import { getProductos } from '../../services/productos';
+import { crearPedido } from '../../services/pedidos';
 
 const PedidoModal = ({ show, onHide, mesa, onUpdate }) => {
   const [loading, setLoading] = useState(false);
@@ -49,11 +50,26 @@ const PedidoModal = ({ show, onHide, mesa, onUpdate }) => {
     } catch (error) { alert('Error'); } finally { setLoading(false); }
   };
 
-  const handleConfirmarPedido = () => {
-    alert(`Enviando pedido a cocina...\nTotal: $${calcularTotalCarrito()}`);
-    // Aquí conectaremos con la DB en el próximo paso
-    onHide();
-  };
+  const handleConfirmarPedido = async () => {
+  if (carrito.length === 0) return;
+
+  try {
+    setLoading(true); // Bloquear botones
+    const total = calcularTotalCarrito();
+
+    // Llamamos al servicio que creamos
+    await crearPedido(mesa.id, carrito, total);
+
+    alert("✅ Pedido enviado a cocina correctamente!");
+    onHide(); // Cerramos el modal
+
+  } catch (error) {
+    console.error(error);
+    alert("❌ Hubo un error al enviar el pedido.");
+  } finally {
+    setLoading(false);
+  }
+};
 
   if (!mesa) return null;
 
