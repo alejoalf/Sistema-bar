@@ -40,3 +40,39 @@ export const updateEstadoMesa = async (id, nuevoEstado) => {
     
   if (error) throw error;
 };
+
+// ... (manten lo que ya tenias arriba: getMesas)
+
+// Función para abrir la mesa (Marcar como ocupada)
+export const abrirMesa = async (idMesa) => {
+  // Si no hay Supabase configurado, simular éxito
+  if (!import.meta.env.VITE_SUPABASE_URL) {
+    console.log('🎭 MOCK: Mesa abierta (ID:', idMesa, ')');
+    await new Promise(resolve => setTimeout(resolve, 500)); // Simular delay
+    return;
+  }
+
+  const { error } = await supabase
+    .from('mesas')
+    .update({ estado: 'ocupada' })
+    .eq('id', idMesa);
+    
+  if (error) throw error;
+};
+
+// Función para cerrar la mesa (Liberar)
+export const cerrarMesa = async (idMesa) => {
+  // Si no hay Supabase configurado, simular éxito
+  if (!import.meta.env.VITE_SUPABASE_URL) {
+    console.log('🎭 MOCK: Mesa cerrada (ID:', idMesa, ')');
+    await new Promise(resolve => setTimeout(resolve, 500)); // Simular delay
+    return;
+  }
+
+  const { error } = await supabase
+    .from('mesas')
+    .update({ estado: 'libre' })
+    .eq('id', idMesa);
+
+  if (error) throw error;
+};

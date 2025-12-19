@@ -1,142 +1,133 @@
-import { Modal, Button, ListGroup, Badge, Alert } from 'react-bootstrap';
-import { Plus, Check } from 'lucide-react';
-import { useState } from 'react';
-import { supabase } from '../../services/supabase';
+import React, { useState, useEffect } from 'react';
+import { Modal, Button, Badge, ListGroup, Row, Col } from 'react-bootstrap';
+import { abrirMesa, cerrarMesa } from '../../services/mesas';
+import { getProductos } from '../../services/productos';
 
-const PedidoModal = ({ mesaSeleccionada, onHide }) => {
-  const [procesando, setProcesando] = useState(false);
+const PedidoModal = ({ show, onHide, mesa, onUpdate }) => {
+  const [loading, setLoading] = useState(false);
+  const [productos, setProductos] = useState([]);
+  const [carrito, setCarrito] = useState([]); // Aquí guardamos lo que se va a pedir
 
-  if (!mesaSeleccionada) return null;
-
-  const handleAbrirMesa = async () => {
-    setProcesando(true);
-    try {
-      // Si no hay Supabase configurado, simular éxito
-      if (!import.meta.env.VITE_SUPABASE_URL) {
-        console.log('🎭 MOCK: Mesa abierta (configura Supabase en .env)');
-        await new Promise(resolve => setTimeout(resolve, 500)); // Simular delay
-        onHide(true);
-        return;
-      }
-
-      const { error } = await supabase
-        .from('mesas')
-        .update({ estado: 'ocupada' })
-        .eq('id', mesaSeleccionada.id);
-
-      if (error) throw error;
-
-      // Cerrar modal y recargar
-      onHide(true); // Pasamos true para indicar que debe recargar
-    } catch (error) {
-      console.error('Error al abrir mesa:', error);
-      alert('Error al abrir la mesa. Usando modo MOCK.');
-      onHide(true);
-    } finally {
-      setProcesando(false);
+  // Cargar productos cuando se abre el modal
+  useEffect(() => {
+    if (show && mesa?.estado === 'ocupada') {
+      cargarProductos();
     }
+    setCarrito([]); // Limpiar carrito al abrir
+  }, [show, mesa]);
+
+  const cargarProductos = async () => {
+    const data = await getProductos();
+    setProductos(data);
   };
 
-  const handleAgregarProducto = () => {
-    // Por ahora solo un alert, en el futuro abrirá un selector de productos
-    alert('Funcionalidad de agregar productos - Próximamente');
+  const agregarAlCarrito = (producto) => {
+    setCarrito([...carrito, producto]);
   };
 
-  const esLibre = mesaSeleccionada.estado === 'libre';
-  const esOcupada = mesaSeleccionada.estado === 'ocupada';
+  const calcularTotalCarrito = () => {
+    return carrito.reduce((total, item) => total + item.precio, 0);
+  };
+
+  // --- Lógica de Mesa ---
+  const handleAbrirMesa = async () => {
+    try {
+      setLoading(true);
+      await abrirMesa(mesa.id);
+      await onUpdate();
+      onHide();
+    } catch (error) { alert('Error'); } finally { setLoading(false); }
+  };
+
+  const handleCerrarMesa = async () => {
+    if(!confirm("¿Liberar mesa y cobrar?")) return;
+    try {
+      setLoading(true);
+      await cerrarMesa(mesa.id);
+      await onUpdate();
+      onHide();
+    } catch (error) { alert('Error'); } finally { setLoading(false); }
+  };
+
+  const handleConfirmarPedido = () => {
+    alert(`Enviando pedido a cocina...\nTotal: $${calcularTotalCarrito()}`);
+    // Aquí conectaremos con la DB en el próximo paso
+    onHide();
+  };
+
+  if (!mesa) return null;
 
   return (
-    <Modal show={!!mesaSeleccionada} onHide={() => onHide(false)} size="lg" centered>
-      <Modal.Header closeButton>
-        <Modal.Title>
-          Mesa {mesaSeleccionada.numero_mesa}
-          <Badge 
-            bg={esLibre ? 'success' : esOcupada ? 'danger' : 'warning'} 
-            className="ms-3"
-          >
-            {mesaSeleccionada.estado.toUpperCase()}
-          </Badge>
-        </Modal.Title>
+    <Modal show={show} onHide={onHide} size="lg" centered>
+      <Modal.Header closeButton className="bg-dark text-white">
+        <Modal.Title>Mesa {mesa.numero_mesa} <Badge bg="secondary">{mesa.estado}</Badge></Modal.Title>
       </Modal.Header>
-
+      
       <Modal.Body>
-        {/* Mesa Libre: Botón para abrir */}
-        {esLibre && (
+        {mesa.estado === 'libre' ? (
           <div className="text-center py-5">
-            <Alert variant="info" className="mb-4">
-              Esta mesa está disponible. Presiona el botón para abrirla y comenzar a tomar pedidos.
-            </Alert>
-            <Button 
-              variant="success" 
-              size="lg" 
-              onClick={handleAbrirMesa}
-              disabled={procesando}
-              className="px-5 py-3"
-            >
-              <Check size={24} className="me-2" />
-              {procesando ? 'Abriendo...' : 'Abrir Mesa'}
+            <h3>Mesa Disponible</h3>
+            <Button variant="success" size="lg" className="mt-3" onClick={handleAbrirMesa} disabled={loading}>
+              👥 ABRIR MESA
             </Button>
           </div>
-        )}
+        ) : (
+          <Row>
+            {/* COLUMNA IZQUIERDA: LISTA DE PRODUCTOS */}
+            <Col md={7} style={{ maxHeight: '60vh', overflowY: 'auto' }}>
+              <h5 className="mb-3">Carta</h5>
+              <ListGroup>
+                {productos.map(prod => (
+                  <ListGroup.Item key={prod.id} action onClick={() => agregarAlCarrito(prod)} className="d-flex justify-content-between align-items-center">
+                    <div>
+                      <strong>{prod.nombre}</strong>
+                      <div className="text-muted small">${prod.precio}</div>
+                    </div>
+                    <Button size="sm" variant="outline-primary">+</Button>
+                  </ListGroup.Item>
+                ))}
+              </ListGroup>
+            </Col>
 
-        {/* Mesa Ocupada: Lista de productos */}
-        {esOcupada && (
-          <div>
-            <div className="d-flex justify-content-between align-items-center mb-3">
-              <h5 className="mb-0">Pedido Actual</h5>
-              <Button 
-                variant="primary" 
-                size="sm" 
-                onClick={handleAgregarProducto}
-              >
-                <Plus size={18} className="me-1" />
-                Agregar Producto
-              </Button>
-            </div>
-
-            {/* Lista de productos (vacía por ahora) */}
-            <ListGroup>
-              <ListGroup.Item className="text-center text-muted py-4">
-                No hay productos en este pedido aún.
-                <br />
-                <small>Presiona "Agregar Producto" para comenzar.</small>
-              </ListGroup.Item>
-            </ListGroup>
-
-            {/* Resumen */}
-            <div className="mt-4 p-3 bg-light rounded">
-              <div className="d-flex justify-content-between align-items-center">
-                <strong>Total:</strong>
-                <h4 className="mb-0">$0.00</h4>
+            {/* COLUMNA DERECHA: RESUMEN DEL PEDIDO ACTUAL */}
+            <Col md={5} className="border-start">
+              <h5 className="mb-3">Nuevo Pedido</h5>
+              {carrito.length === 0 ? (
+                <p className="text-muted text-center py-4">Selecciona productos...</p>
+              ) : (
+                <ul className="list-unstyled">
+                  {carrito.map((item, index) => (
+                    <li key={index} className="d-flex justify-content-between border-bottom py-1">
+                      <span>{item.nombre}</span>
+                      <strong>${item.precio}</strong>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              
+              <div className="mt-4 pt-3 border-top">
+                <h4 className="d-flex justify-content-between">
+                  <span>Total:</span>
+                  <span>${calcularTotalCarrito()}</span>
+                </h4>
+                <Button 
+                    variant="success" 
+                    className="w-100 mt-2" 
+                    disabled={carrito.length === 0}
+                    onClick={handleConfirmarPedido}
+                >
+                    CONFIRMAR PEDIDO 🚀
+                </Button>
+                
+                <hr />
+                <Button variant="outline-danger" className="w-100" size="sm" onClick={handleCerrarMesa}>
+                    Cerrar Mesa
+                </Button>
               </div>
-            </div>
-          </div>
-        )}
-
-        {/* Mesa en otros estados (pagando, etc) */}
-        {!esLibre && !esOcupada && (
-          <Alert variant="warning">
-            Esta mesa está en estado: <strong>{mesaSeleccionada.estado}</strong>
-          </Alert>
+            </Col>
+          </Row>
         )}
       </Modal.Body>
-
-      <Modal.Footer>
-        <Button variant="secondary" onClick={() => onHide(false)}>
-          Cerrar
-        </Button>
-        
-        {esOcupada && (
-          <>
-            <Button variant="warning">
-              Marcar como Pagando
-            </Button>
-            <Button variant="success">
-              Cerrar Mesa
-            </Button>
-          </>
-        )}
-      </Modal.Footer>
     </Modal>
   );
 };
