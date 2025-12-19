@@ -37,12 +37,7 @@ npm install
 
 ### 2. Configurar variables de entorno
 
-Crea un archivo `.env` en la raíz del proyecto basándote en `.env.example`:
 
-```env
-VITE_SUPABASE_URL=tu_url_de_supabase
-VITE_SUPABASE_ANON_KEY=tu_clave_anonima
-```
 
 ### 3. Ejecutar en desarrollo
 
@@ -75,11 +70,4 @@ El proyecto utiliza **React Bootstrap** para todos los componentes visuales, man
 
 ## React Compiler
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
 
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
-=======
-# Sistema-bar
->>>>>>> 3c893e904017c3cd3456087470b01c8dda35650c
