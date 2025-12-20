@@ -1,6 +1,6 @@
 import React from 'react';
 import { Nav } from 'react-bootstrap';
-import { LayoutDashboard, Coffee, FileText, Settings, DollarSign } from 'lucide-react';
+import { LayoutDashboard, ClipboardList, FileText, Settings, DollarSign } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 
 const NavigationLinks = ({ onLinkClick, mobile = false }) => {
@@ -28,11 +28,11 @@ const NavigationLinks = ({ onLinkClick, mobile = false }) => {
         <LayoutDashboard size={20} /> Salón
       </Link>
       <Link 
-        to="/cocina" 
-        className={`${linkStyle} ${isActive('/cocina') ? activeStyle : inactiveStyle}`}
+        to="/pedidos" 
+        className={`${linkStyle} ${isActive('/pedidos') ? activeStyle : inactiveStyle}`}
         onClick={handleClick}
       >
-        <Coffee size={20} /> Cocina
+        <ClipboardList size={20} /> Pedidos
       </Link>
       <Link 
         to="/historial" 

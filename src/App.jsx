@@ -9,6 +9,7 @@ import Login from './pages/Login';
 import { useBarStore } from './store/useBarStore';
 import Historial from './pages/Historial';
 import CierreCaja from './pages/CierreCaja';
+import PedidosActivos from './pages/PedidosActivos';
 
 // Componente para Rutas Protegidas
 // Si no hay usuario, te manda al Login. Si hay, te muestra el contenido.
@@ -59,10 +60,10 @@ function App() {
             <DashboardLayout>
               <Routes>
                 <Route path="/" element={<Salon />} />
+                <Route path="/pedidos" element={<PedidosActivos />} />
                 <Route path="/historial" element={<Historial />} />
                 <Route path="/cierre" element={<CierreCaja />} />
                 <Route path="/admin" element={<Admin />} />
-                <Route path="/cocina" element={<h2>Cocina (Próximamente)</h2>} />
               </Routes>
             </DashboardLayout>
           </RutaProtegida>

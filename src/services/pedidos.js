@@ -1,29 +1,31 @@
 import { supabase } from './supabase';
 
-export const crearPedido = async (mesaId, items, total) => {
+// Crear un pedido (Sirve para Mesa y para Barra)
+export const crearPedido = async (mesaId, items, total, nombreCliente = null) => {
   try {
-    // 1. Crear la cabecera del pedido (Tabla 'pedidos')
+    const pedidoObj = { 
+      estado: 'pendiente', 
+      total: total,
+      cliente: nombreCliente 
+    };
+
+    // Solo asignamos mesa si existe (si es null, es pedido de barra)
+    if (mesaId) pedidoObj.mesa_id = mesaId;
+
     const { data: pedidoData, error: pedidoError } = await supabase
       .from('pedidos')
-      .insert([
-        { 
-          mesa_id: mesaId, 
-          estado: 'pendiente', // 'pendiente' significa que va a cocina
-          total: total 
-        }
-      ])
-      .select() // Importante: devuelve el dato insertado para tener el ID
+      .insert([pedidoObj])
+      .select()
       .single();
 
     if (pedidoError) throw pedidoError;
 
     const pedidoId = pedidoData.id;
 
-    // 2. Preparar los detalles (Tabla 'detalle_pedidos')
     const detalles = items.map(item => ({
       pedido_id: pedidoId,
       producto_id: item.id,
-      cantidad: 1, // Por simplicidad asumimos 1 por item del array
+      cantidad: 1, 
       precio_unitario: item.precio
     }));
 
@@ -33,10 +35,29 @@ export const crearPedido = async (mesaId, items, total) => {
 
     if (detalleError) throw detalleError;
 
-    // 3. (Opcional) Restar Stock - Lo hacemos simple por ahora
-    // Recorremos los items y restamos 1 al stock
+    // Restar Stock
     for (const item of items) {
-        await supabase.rpc('restar_stock', { p_id: item.id, p_cantidad: 1 });
+      const { data: producto, error: errorGet } = await supabase
+        .from('productos')
+        .select('stock_actual')
+        .eq('id', item.id)
+        .single();
+
+      if (errorGet) {
+        console.error(`Error obteniendo stock del producto ${item.id}:`, errorGet);
+        continue;
+      }
+
+      const nuevoStock = producto.stock_actual - 1;
+      
+      const { error: errorUpdate } = await supabase
+        .from('productos')
+        .update({ stock_actual: nuevoStock })
+        .eq('id', item.id);
+
+      if (errorUpdate) {
+        console.error(`Error actualizando stock del producto ${item.id}:`, errorUpdate);
+      }
     }
 
     return pedidoId;
@@ -47,73 +68,160 @@ export const crearPedido = async (mesaId, items, total) => {
   }
 };
 
-// Obtener la cuenta actual de la mesa (Pedidos no cobrados)
+// Obtener cuenta de una mesa
 export const getCuentaMesa = async (mesaId) => {
   const { data, error } = await supabase
     .from('pedidos')
     .select(`
-      id,
-      total,
-      estado,
-      created_at,
-      detalle_pedidos (
-        cantidad,
-        precio_unitario,
-        productos (nombre)
-      )
+      id, total, estado, created_at,
+      detalle_pedidos ( id, pedido_id, producto_id, cantidad, precio_unitario, productos (nombre) )
     `)
     .eq('mesa_id', mesaId)
-    .neq('estado', 'cobrado'); // Traer todo lo que NO esté cobrado ya
+    .neq('estado', 'cobrado');
 
-  if (error) {
-    console.error('Error al traer cuenta:', error);
-    return [];
-  }
+  if (error) return [];
   return data;
 };
 
-// Cobrar mesa 
+// Cobrar Mesa (Libera la mesa)
 export const cobrarMesa = async (mesaId) => {
-  // 1. Marcar pedidos como cobrados
   const { error: errorPedidos } = await supabase
     .from('pedidos')
     .update({ estado: 'cobrado' })
     .eq('mesa_id', mesaId)
     .neq('estado', 'cobrado');
-
   if (errorPedidos) throw errorPedidos;
 
-  // 2. Liberar la mesa 
   const { error: errorMesa } = await supabase
     .from('mesas')
     .update({ estado: 'libre' })
     .eq('id', mesaId);
-
   if (errorMesa) throw errorMesa;
 };
 
-// Obtener historial de ventas (Pedidos cobrados)
+// --- NUEVAS FUNCIONES PARA BARRA (ESTAS ERAN LAS QUE FALTABAN) ---
+
+// Traer pedidos de barra (sin mesa)
+export const getPedidosBarra = async () => {
+  const { data, error } = await supabase
+    .from('pedidos')
+    .select(`
+      id, cliente, total, created_at, estado,
+      detalle_pedidos ( id, pedido_id, producto_id, cantidad, precio_unitario, productos (nombre) )
+    `)
+    .is('mesa_id', null) 
+    .neq('estado', 'cobrado');
+
+  if (error) return [];
+  return data;
+};
+
+// Cobrar pedido de barra específico
+export const cobrarPedidoBarra = async (pedidoId) => {
+  const { error } = await supabase
+    .from('pedidos')
+    .update({ estado: 'cobrado' })
+    .eq('id', pedidoId);
+  if (error) throw error;
+};
+
+// Cobrar todos los pedidos de un cliente de barra
+export const cobrarClienteBarra = async (nombreCliente) => {
+  const { error } = await supabase
+    .from('pedidos')
+    .update({ estado: 'cobrado' })
+    .eq('cliente', nombreCliente)
+    .is('mesa_id', null)
+    .neq('estado', 'cobrado');
+  if (error) throw error;
+};
+
+// Obtener cuenta completa de un cliente de barra
+export const getCuentaCliente = async (nombreCliente) => {
+  const { data, error } = await supabase
+    .from('pedidos')
+    .select(`
+      id, total, estado, created_at,
+      detalle_pedidos ( id, pedido_id, producto_id, cantidad, precio_unitario, productos (nombre) )
+    `)
+    .eq('cliente', nombreCliente)
+    .is('mesa_id', null)
+    .neq('estado', 'cobrado');
+
+  if (error) return [];
+  return data;
+};
+
+// Eliminar un item de un pedido
+export const eliminarItemPedido = async (detalleId, productoId, precioUnitario, pedidoId) => {
+  try {
+    // Devolver stock primero
+    const { data: producto, error: errorGet } = await supabase
+      .from('productos')
+      .select('stock_actual')
+      .eq('id', productoId)
+      .single();
+
+    if (!errorGet && producto) {
+      await supabase
+        .from('productos')
+        .update({ stock_actual: producto.stock_actual + 1 })
+        .eq('id', productoId);
+    }
+
+    // Eliminar el detalle
+    const { error: deleteError } = await supabase
+      .from('detalle_pedidos')
+      .delete()
+      .eq('id', detalleId);
+
+    if (deleteError) throw deleteError;
+
+    // Recalcular el total del pedido
+    await recalcularTotalPedido(pedidoId);
+
+    return true;
+  } catch (error) {
+    console.error('Error eliminando item:', error);
+    throw error;
+  }
+};
+
+// Recalcular total de un pedido
+const recalcularTotalPedido = async (pedidoId) => {
+  const { data: detalles } = await supabase
+    .from('detalle_pedidos')
+    .select('cantidad, precio_unitario')
+    .eq('pedido_id', pedidoId);
+
+  if (detalles && detalles.length > 0) {
+    const nuevoTotal = detalles.reduce((sum, d) => sum + (d.cantidad * d.precio_unitario), 0);
+    
+    await supabase
+      .from('pedidos')
+      .update({ total: nuevoTotal })
+      .eq('id', pedidoId);
+  } else {
+    // Si no quedan items, marcar pedido como cobrado o eliminarlo
+    await supabase
+      .from('pedidos')
+      .update({ estado: 'cancelado' })
+      .eq('id', pedidoId);
+  }
+};
+
+// Obtener historial completo
 export const getHistorialVentas = async () => {
   const { data, error } = await supabase
     .from('pedidos')
     .select(`
-      id,
-      created_at,
-      total,
-      estado,
+      id, created_at, total, estado, cliente,
       mesas (numero_mesa),
-      detalle_pedidos (
-        cantidad,
-        precio_unitario,
-        productos (nombre)
-      )
+      detalle_pedidos ( cantidad, precio_unitario, productos (nombre, categoria) )
     `)
     .eq('estado', 'cobrado')
     .order('created_at', { ascending: false });
 
-  if (error) {
-    console.error('Error cargando historial:', error);
-    return [];
-  }
+  if (error) return [];
   return data;
 };

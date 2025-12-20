@@ -13,6 +13,7 @@ const Salon = () => {
   // Estados para controlar el Modal
   const [showModal, setShowModal] = useState(false);
   const [mesaActiva, setMesaActiva] = useState(null);
+  const [pedidoBarra, setPedidoBarra] = useState(null);
 
   useEffect(() => {
     cargarMesas();
@@ -27,12 +28,26 @@ const Salon = () => {
 
   const handleMesaClick = (mesa) => {
     setMesaActiva(mesa); // Guardamos qué mesa se tocó
+    setPedidoBarra(null); // Limpiamos pedido barra
     setShowModal(true);  // Mostramos el modal
+  };
+
+  const handleNuevoPedidoBarra = () => {
+    const nombreCliente = prompt("📝 Nombre del cliente:");
+    if (!nombreCliente || nombreCliente.trim() === '') return;
+    
+    setPedidoBarra({ 
+      esNuevo: true, 
+      cliente: nombreCliente.trim() 
+    });
+    setMesaActiva(null); // Limpiamos mesa activa
+    setShowModal(true);
   };
 
   const cerrarModal = () => {
     setShowModal(false);
     setMesaActiva(null);
+    setPedidoBarra(null);
   };
 
   if (loading && mesas.length === 0) {
@@ -47,9 +62,14 @@ const Salon = () => {
     <Container className="py-4">
       <div className="d-flex justify-content-between align-items-center mb-4">
         <h2>Salón Principal</h2>
-        <button className="btn btn-sm btn-outline-secondary" onClick={() => cargarMesas()}>
+        <div className="d-flex gap-2">
+          <button className="btn btn-success" onClick={handleNuevoPedidoBarra}>
+            ➕ Nuevo Pedido
+          </button>
+          <button className="btn btn-sm btn-outline-secondary" onClick={() => cargarMesas()}>
             🔄 Actualizar
-        </button>
+          </button>
+        </div>
       </div>
 
       <Row>
@@ -65,6 +85,7 @@ const Salon = () => {
         show={showModal} 
         onHide={cerrarModal} 
         mesa={mesaActiva}
+        pedidoBarra={pedidoBarra}
         onUpdate={cargarMesas} // Le pasamos la función para refrescar la lista
       />
 
