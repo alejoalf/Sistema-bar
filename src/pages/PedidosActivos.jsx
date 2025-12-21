@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Container, Row, Col, Card, Badge, Button, Table, Spinner, Modal, ListGroup, Toast, ToastContainer } from 'react-bootstrap';
-import { ClipboardList, RefreshCw, ShoppingBag, Trash2, Edit2, CheckCircle, XCircle } from 'lucide-react';
+import { ClipboardList, RefreshCw, ShoppingBag, Trash2, Edit2, CheckCircle, XCircle, Users } from 'lucide-react';
 import { getPedidosBarra, cobrarClienteBarra, getCuentaMesa, cobrarMesa, eliminarItemPedido, crearPedido, cancelarClienteBarra, cancelarMesa } from '../services/pedidos';
 import { getMesas } from '../services/mesas';
 import { getProductos } from '../services/productos';
@@ -20,6 +20,15 @@ const PedidosActivos = () => {
   const [pedidoEditando, setPedidoEditando] = useState(null);
   const [productos, setProductos] = useState([]);
   const [carrito, setCarrito] = useState([]);
+
+  const totalBarraMonto = useMemo(() => pedidosBarra.reduce((sum, cliente) => sum + cliente.total, 0), [pedidosBarra]);
+  const totalMesasMonto = useMemo(() => pedidosMesas.reduce((sum, mesaData) => sum + mesaData.total, 0), [pedidosMesas]);
+  const totalPendiente = totalBarraMonto + totalMesasMonto;
+  const totalTickets = useMemo(() => {
+    const barra = pedidosBarra.reduce((sum, cliente) => sum + cliente.pedidos.length, 0);
+    const mesas = pedidosMesas.reduce((sum, mesaData) => sum + mesaData.pedidos.length, 0);
+    return barra + mesas;
+  }, [pedidosBarra, pedidosMesas]);
 
   useEffect(() => {
     cargarPedidos();
@@ -330,226 +339,240 @@ const PedidosActivos = () => {
 
   if (loading) {
     return (
-      <Container fluid className="py-4 d-flex justify-content-center align-items-center" style={{ minHeight: '50vh', backgroundColor: '#f8f9fa' }}>
+      <Container fluid className="py-4 d-flex justify-content-center align-items-center" style={{ minHeight: '50vh', backgroundColor: '#f4f6fb' }}>
         <Spinner animation="border" variant="primary" />
       </Container>
     );
   }
 
+  const metricCards = [
+    {
+      title: 'Pedidos de Barra',
+      value: pedidosBarra.length,
+      subtitle: `$${totalBarraMonto.toLocaleString()}`,
+      icon: <ShoppingBag size={22} />,
+      accent: 'info',
+      iconBg: 'rgba(59,130,246,0.12)'
+    },
+    {
+      title: 'Mesas Ocupadas',
+      value: pedidosMesas.length,
+      subtitle: `$${totalMesasMonto.toLocaleString()}`,
+      icon: <Users size={22} />,
+      accent: 'primary',
+      iconBg: 'rgba(59,130,246,0.12)'
+    },
+    {
+      title: 'Pedidos Pendientes',
+      value: totalTickets,
+      subtitle: `$${totalPendiente.toLocaleString()}`,
+      icon: <ClipboardList size={22} />,
+      accent: 'success',
+      iconBg: 'rgba(16,185,129,0.12)'
+    }
+  ];
+
   return (
-    <Container fluid className="py-3 py-md-4 px-2 px-md-4" style={{ backgroundColor: '#f8f9fa', minHeight: '100vh' }}>
+    <Container fluid className="py-4" style={{ backgroundColor: '#f4f6fb', minHeight: '100vh' }}>
       <style>{`
-        .hover-card:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
-          transition: all 0.2s ease;
+        .order-card {
+          border: 1px solid #e6e9f2;
+          border-radius: 16px;
+          transition: transform 0.2s ease, box-shadow 0.2s ease;
         }
-        
-        @media (max-width: 767px) {
-          .card-body {
-            font-size: 0.85rem;
-          }
+        .order-card:hover {
+          transform: translateY(-3px);
+          box-shadow: 0 14px 28px rgba(15, 23, 42, 0.08);
+        }
+        .order-card-header {
+          border-bottom: 1px solid #eef1f7;
+          border-radius: 16px 16px 0 0;
+          background: linear-gradient(90deg, rgba(59,130,246,0.08), rgba(59,130,246,0));
+        }
+        .list-scroll {
+          max-height: 420px;
+          overflow-y: auto;
         }
       `}</style>
-      
-      {/* Header */}
-      <div className="mb-3 mb-md-4">
-        <div className="d-flex flex-column flex-md-row justify-content-between align-items-start mb-2">
-          <div className="mb-3 mb-md-0">
-            <h2 className="mb-1 fw-bold fs-4 fs-md-2" style={{ color: '#2d3748' }}>
-              <ClipboardList size={24} className="me-2 d-none d-md-inline" />
-              Pedidos Activos
-            </h2>
-            <p className="text-muted mb-0 small">Gestión de pedidos pendientes de cobro</p>
-          </div>
-          <Button 
-            variant="outline-secondary"
-            onClick={cargarPedidos}
-            disabled={loading}
-          >
-            {loading ? <Spinner animation="border" size="sm" className="me-1"/> : <RefreshCw size={18} className="me-1" />}
-            Actualizar
-          </Button>
+
+      <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-4">
+        <div>
+          <h2 className="mb-1 d-flex align-items-center" style={{ color: '#1f2937' }}>
+            <ClipboardList size={26} className="me-2 text-primary" />
+            Pedidos Activos
+          </h2>
+          <p className="text-muted mb-0">Controla los pedidos pendientes de cobro en tiempo real.</p>
         </div>
+        <Button
+          variant="outline-secondary"
+          onClick={cargarPedidos}
+          disabled={loading}
+          size="sm"
+          className="d-flex align-items-center"
+        >
+          {loading ? <Spinner animation="border" size="sm" className="me-2" /> : <RefreshCw size={16} className="me-2" />}
+          {loading ? 'Actualizando...' : 'Actualizar'}
+        </Button>
       </div>
 
-      {/* Estadísticas */}
-      <Row className="mb-4">
-        <Col xs={6} md={3} className="mb-3">
-          <Card className="border-0 shadow-sm h-100">
-            <Card.Body className="text-center">
-              <ShoppingBag size={28} className="text-info mb-2" />
-              <h3 className="mb-0 fw-bold">{pedidosBarra.length}</h3>
-              <small className="text-muted">Pedidos Barra</small>
+      <Row className="g-3 mb-4">
+        {metricCards.map((card, idx) => (
+          <Col md={4} key={idx}>
+            <Card className="border-0 shadow-sm h-100">
+              <Card.Body className="d-flex justify-content-between align-items-center">
+                <div>
+                  <p className="text-muted small mb-2">{card.title}</p>
+                  <h3 className={`mb-0 text-${card.accent}`}>{card.value}</h3>
+                  <small className="text-muted">{card.subtitle}</small>
+                </div>
+                <div style={{ backgroundColor: card.iconBg, borderRadius: '12px', width: 40, height: 40 }} className="d-flex align-items-center justify-content-center">
+                  <span className={`text-${card.accent}`}>{card.icon}</span>
+                </div>
+              </Card.Body>
+            </Card>
+          </Col>
+        ))}
+      </Row>
+
+      <Row className="g-4">
+        <Col xl={6}>
+          <Card className="order-card">
+            <Card.Header className="order-card-header d-flex justify-content-between align-items-center">
+              <span className="fw-semibold text-primary">Pedidos de Barra</span>
+              <Badge bg="warning" text="dark">Pendientes</Badge>
+            </Card.Header>
+            <Card.Body>
+              {pedidosBarra.length === 0 ? (
+                <div className="text-center text-muted py-5">
+                  <ShoppingBag size={48} className="mb-3" />
+                  No hay pedidos de barra activos.
+                </div>
+              ) : (
+                <div className="d-flex flex-column gap-3">
+                  {pedidosBarra.map(({ cliente, pedidos, total }) => (
+                    <Card className="border-0 shadow-sm" key={cliente}>
+                      <Card.Header className="bg-white d-flex justify-content-between align-items-center" style={{ borderBottom: '1px solid #eef1f7' }}>
+                        <div>
+                          <span className="fw-semibold">{cliente}</span>
+                          <div className="text-muted small">{pedidos.length} ticket(s)</div>
+                        </div>
+                        <Badge bg="warning" text="dark">Pendiente</Badge>
+                      </Card.Header>
+                      <Card.Body>
+                        <Table size="sm" borderless className="mb-3">
+                          <tbody>
+                            {pedidos.map((pedido) => (
+                              <React.Fragment key={pedido.id}>
+                                <tr>
+                                  <td colSpan={2} className="text-muted small pt-2">
+                                    {new Date(pedido.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                  </td>
+                                </tr>
+                                {pedido.detalle_pedidos?.map((detalle) => (
+                                  <tr key={detalle.id || `${pedido.id}-${detalle.producto_id}`}>
+                                    <td className="small">• {detalle.cantidad}x {detalle.productos?.nombre}</td>
+                                    <td className="text-end small fw-semibold">${(detalle.precio_unitario * detalle.cantidad).toLocaleString()}</td>
+                                  </tr>
+                                ))}
+                              </React.Fragment>
+                            ))}
+                          </tbody>
+                        </Table>
+                        <div className="d-flex justify-content-between align-items-center">
+                          <span className="fw-semibold text-muted">Total pendiente</span>
+                          <h5 className="mb-0 text-primary">${total.toLocaleString()}</h5>
+                        </div>
+                      </Card.Body>
+                      <Card.Footer className="bg-white border-top-0">
+                        <div className="d-grid gap-2">
+                          <Button variant="outline-primary" onClick={() => handleEditarPedido(pedidos, 'barra', cliente)}>
+                            <Edit2 size={16} className="me-2" /> Editar Pedido
+                          </Button>
+                          <Button variant="outline-danger" onClick={() => handleCancelarBarra(cliente)}>
+                            <XCircle size={16} className="me-2" /> Cancelar Pedido
+                          </Button>
+                          <Button variant="success" onClick={() => handleCobrarBarra(cliente)}>
+                            💸 Cobrar - ${total.toLocaleString()}
+                          </Button>
+                        </div>
+                      </Card.Footer>
+                    </Card>
+                  ))}
+                </div>
+              )}
             </Card.Body>
           </Card>
         </Col>
-        <Col xs={6} md={3} className="mb-3">
-          <Card className="border-0 shadow-sm h-100">
-            <Card.Body className="text-center">
-              <ClipboardList size={28} className="text-danger mb-2" />
-              <h3 className="mb-0 fw-bold">{pedidosMesas.length}</h3>
-              <small className="text-muted">Mesas Ocupadas</small>
+
+        <Col xl={6}>
+          <Card className="order-card">
+            <Card.Header className="order-card-header d-flex justify-content-between align-items-center">
+              <span className="fw-semibold text-primary">Mesas Ocupadas</span>
+              <Badge bg="danger">Ocupadas</Badge>
+            </Card.Header>
+            <Card.Body>
+              {pedidosMesas.length === 0 ? (
+                <div className="text-center text-muted py-5">
+                  <ClipboardList size={48} className="mb-3" />
+                  No hay mesas con pedidos pendientes.
+                </div>
+              ) : (
+                <div className="d-flex flex-column gap-3">
+                  {pedidosMesas.map(({ mesa, pedidos, total }) => (
+                    <Card className="border-0 shadow-sm" key={mesa.id}>
+                      <Card.Header className="bg-white d-flex justify-content-between align-items-center" style={{ borderBottom: '1px solid #eef1f7' }}>
+                        <div>
+                          <span className="fw-semibold">Mesa {mesa.numero_mesa}</span>
+                          <div className="text-muted small">{pedidos.length} ticket(s)</div>
+                        </div>
+                        <Badge bg="danger">Ocupada</Badge>
+                      </Card.Header>
+                      <Card.Body>
+                        <Table size="sm" borderless className="mb-3">
+                          <tbody>
+                            {pedidos.map((pedido) => (
+                              <React.Fragment key={pedido.id}>
+                                <tr>
+                                  <td colSpan={2} className="text-muted small pt-2">
+                                    {new Date(pedido.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                  </td>
+                                </tr>
+                                {pedido.detalle_pedidos?.map((detalle) => (
+                                  <tr key={detalle.id || `${pedido.id}-${detalle.producto_id}`}>
+                                    <td className="small">• {detalle.cantidad}x {detalle.productos?.nombre}</td>
+                                    <td className="text-end small fw-semibold">${(detalle.precio_unitario * detalle.cantidad).toLocaleString()}</td>
+                                  </tr>
+                                ))}
+                              </React.Fragment>
+                            ))}
+                          </tbody>
+                        </Table>
+                        <div className="d-flex justify-content-between align-items-center">
+                          <span className="fw-semibold text-muted">Total pendiente</span>
+                          <h5 className="mb-0 text-primary">${total.toLocaleString()}</h5>
+                        </div>
+                      </Card.Body>
+                      <Card.Footer className="bg-white border-top-0">
+                        <div className="d-grid gap-2">
+                          <Button variant="outline-primary" onClick={() => handleEditarPedido(pedidos, 'mesa', mesa.id, mesa.id)}>
+                            <Edit2 size={16} className="me-2" /> Editar Pedido
+                          </Button>
+                          <Button variant="outline-danger" onClick={() => handleCancelarMesa(mesa.id)}>
+                            <XCircle size={16} className="me-2" /> Cancelar Mesa
+                          </Button>
+                          <Button variant="success" onClick={() => handleCobrarMesa(mesa.id)}>
+                            💸 Cobrar - ${total.toLocaleString()}
+                          </Button>
+                        </div>
+                      </Card.Footer>
+                    </Card>
+                  ))}
+                </div>
+              )}
             </Card.Body>
           </Card>
         </Col>
       </Row>
-
-      {/* Pedidos de Barra */}
-      <div className="mb-5">
-        <h4 className="mb-3 fw-semibold" style={{ color: '#2d3748' }}>
-          🛍️ Pedidos de Barra
-        </h4>
-        {pedidosBarra.length === 0 ? (
-          <Card className="border-0 shadow-sm">
-            <Card.Body className="text-center py-5">
-              <ShoppingBag size={48} className="text-muted mb-3" />
-              <p className="text-muted mb-0">No hay pedidos de barra activos</p>
-            </Card.Body>
-          </Card>
-        ) : (
-          <Row>
-            {pedidosBarra.map(({ cliente, pedidos, total }) => (
-              <Col key={cliente} xs={12} md={6} lg={4} className="mb-3">
-                <Card className="border-0 shadow-sm hover-card h-100">
-                  <Card.Header className="bg-info text-white border-0 d-flex justify-content-between align-items-center">
-                    <span className="fw-bold">{cliente}</span>
-                    <Badge bg="warning" text="dark">pendiente</Badge>
-                  </Card.Header>
-                  <Card.Body>
-                    <Table size="sm" borderless className="mb-0">
-                      <tbody>
-                        {pedidos.map(pedido => (
-                          <React.Fragment key={pedido.id}>
-                            <tr>
-                              <td colSpan={2} className="text-muted small pt-2">
-                                {new Date(pedido.created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
-                              </td>
-                            </tr>
-                            {pedido.detalle_pedidos?.map((detalle, idx) => (
-                              <tr key={idx}>
-                                <td className="small">• {detalle.cantidad}x {detalle.productos?.nombre}</td>
-                                <td className="text-end small fw-semibold">${detalle.precio_unitario * detalle.cantidad}</td>
-                              </tr>
-                            ))}
-                          </React.Fragment>
-                        ))}
-                      </tbody>
-                    </Table>
-                    <hr />
-                    <div className="d-flex justify-content-between align-items-center">
-                      <span className="fw-semibold">Total:</span>
-                      <h4 className="mb-0 text-primary fw-bold">${total}</h4>
-                    </div>
-                  </Card.Body>
-                  <Card.Footer className="bg-white border-0 pt-0">
-                    <div className="d-grid gap-2">
-                      <Button 
-                        variant="outline-primary" 
-                        onClick={() => handleEditarPedido(pedidos, 'barra', cliente)}
-                      >
-                        <Edit2 size={18} className="me-2" />
-                        Editar Pedido
-                      </Button>
-                      <Button 
-                        variant="outline-danger" 
-                        onClick={() => handleCancelarBarra(cliente)}
-                      >
-                        <XCircle size={18} className="me-2" />
-                        Cancelar Pedido
-                      </Button>
-                      <Button 
-                        variant="success" 
-                        onClick={() => handleCobrarBarra(cliente)}
-                      >
-                        💸 Cobrar - ${total}
-                      </Button>
-                    </div>
-                  </Card.Footer>
-                </Card>
-              </Col>
-            ))}
-          </Row>
-        )}
-      </div>
-
-      {/* Pedidos de Mesas */}
-      <div>
-        <h4 className="mb-3 fw-semibold" style={{ color: '#2d3748' }}>
-          🪑 Mesas Ocupadas
-        </h4>
-        {pedidosMesas.length === 0 ? (
-          <Card className="border-0 shadow-sm">
-            <Card.Body className="text-center py-5">
-              <ClipboardList size={48} className="text-muted mb-3" />
-              <p className="text-muted mb-0">No hay mesas ocupadas</p>
-            </Card.Body>
-          </Card>
-        ) : (
-          <Row>
-            {pedidosMesas.map(({ mesa, pedidos, total }) => (
-              <Col key={mesa.id} xs={12} md={6} lg={4} className="mb-3">
-                <Card className="border-0 shadow-sm hover-card h-100">
-                  <Card.Header className="bg-dark text-white border-0 d-flex justify-content-between align-items-center">
-                    <span className="fw-bold">Mesa {mesa.numero_mesa}</span>
-                    <Badge bg="danger">ocupada</Badge>
-                  </Card.Header>
-                  <Card.Body>
-                    <Table size="sm" borderless className="mb-0">
-                      <tbody>
-                        {pedidos.map(pedido => (
-                          <React.Fragment key={pedido.id}>
-                            <tr>
-                              <td colSpan={2} className="text-muted small pt-2">
-                                {new Date(pedido.created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
-                              </td>
-                            </tr>
-                            {pedido.detalle_pedidos?.map((detalle, idx) => (
-                              <tr key={idx}>
-                                <td className="small">• {detalle.cantidad}x {detalle.productos?.nombre}</td>
-                                <td className="text-end small fw-semibold">${detalle.precio_unitario * detalle.cantidad}</td>
-                              </tr>
-                            ))}
-                          </React.Fragment>
-                        ))}
-                      </tbody>
-                    </Table>
-                    <hr />
-                    <div className="d-flex justify-content-between align-items-center">
-                      <span className="fw-semibold">Total:</span>
-                      <h4 className="mb-0 text-primary fw-bold">${total}</h4>
-                    </div>
-                  </Card.Body>
-                  <Card.Footer className="bg-white border-0 pt-0">
-                    <div className="d-grid gap-2">
-                      <Button 
-                        variant="outline-primary" 
-                        onClick={() => handleEditarPedido(pedidos, 'mesa', mesa.id, mesa.id)}
-                      >
-                        <Edit2 size={18} className="me-2" />
-                        Editar Pedido
-                      </Button>
-                      <Button 
-                        variant="outline-danger" 
-                        onClick={() => handleCancelarMesa(mesa.id)}
-                      >
-                        <XCircle size={18} className="me-2" />
-                        Cancelar Mesa
-                      </Button>
-                      <Button 
-                        variant="success" 
-                        onClick={() => handleCobrarMesa(mesa.id)}
-                      >
-                        💸 Cobrar - ${total}
-                      </Button>
-                    </div>
-                  </Card.Footer>
-                </Card>
-              </Col>
-            ))}
-          </Row>
-        )}
-      </div>
 
       {/* Modal de edición de pedido */}
       <Modal show={showEditModal} onHide={cerrarEditModal} size="lg" centered>
