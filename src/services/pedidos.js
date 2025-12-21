@@ -77,7 +77,8 @@ export const getCuentaMesa = async (mesaId) => {
       detalle_pedidos ( id, pedido_id, producto_id, cantidad, precio_unitario, productos (nombre) )
     `)
     .eq('mesa_id', mesaId)
-    .neq('estado', 'cobrado');
+    .neq('estado', 'cobrado')
+    .neq('estado', 'cancelado');
 
   if (error) return [];
   return data;
@@ -110,7 +111,8 @@ export const getPedidosBarra = async () => {
       detalle_pedidos ( id, pedido_id, producto_id, cantidad, precio_unitario, productos (nombre) )
     `)
     .is('mesa_id', null) 
-    .neq('estado', 'cobrado');
+    .neq('estado', 'cobrado')
+    .neq('estado', 'cancelado');
 
   if (error) return [];
   return data;
@@ -134,6 +136,110 @@ export const cobrarClienteBarra = async (nombreCliente) => {
     .is('mesa_id', null)
     .neq('estado', 'cobrado');
   if (error) throw error;
+};
+
+const devolverStockPorPedidos = async (pedidos = []) => {
+  for (const pedido of pedidos) {
+    for (const detalle of pedido.detalle_pedidos || []) {
+      const { data: producto, error: errorGet } = await supabase
+        .from('productos')
+        .select('stock_actual')
+        .eq('id', detalle.producto_id)
+        .single();
+
+      if (errorGet || !producto) continue;
+
+      await supabase
+        .from('productos')
+        .update({ stock_actual: producto.stock_actual + (detalle.cantidad || 0) })
+        .eq('id', detalle.producto_id);
+    }
+  }
+};
+
+// Cancelar todos los pedidos de un cliente de barra (devolver stock y ELIMINAR pedidos)
+export const cancelarClienteBarra = async (nombreCliente) => {
+  try {
+    const { data: pedidos, error: errorSelect } = await supabase
+      .from('pedidos')
+      .select(`
+        id,
+        detalle_pedidos ( id, producto_id, cantidad )
+      `)
+      .eq('cliente', nombreCliente)
+      .is('mesa_id', null)
+      .neq('estado', 'cobrado');
+
+    if (errorSelect) throw errorSelect;
+
+    await devolverStockPorPedidos(pedidos || []);
+
+    const pedidoIds = (pedidos || []).map((p) => p.id);
+    if (pedidoIds.length > 0) {
+      // Borrar detalles primero (por si no hay ON DELETE CASCADE)
+      const { error: errorDeleteDetalles } = await supabase
+        .from('detalle_pedidos')
+        .delete()
+        .in('pedido_id', pedidoIds);
+      if (errorDeleteDetalles) throw errorDeleteDetalles;
+
+      const { error: errorDeletePedidos } = await supabase
+        .from('pedidos')
+        .delete()
+        .in('id', pedidoIds);
+      if (errorDeletePedidos) throw errorDeletePedidos;
+    }
+
+    return true;
+  } catch (error) {
+    console.error('Error cancelando cliente barra:', error);
+    throw error;
+  }
+};
+
+// Cancelar todos los pedidos de una mesa (devolver stock, ELIMINAR pedidos y liberar mesa)
+export const cancelarMesa = async (mesaId) => {
+  try {
+    const { data: pedidos, error: errorSelect } = await supabase
+      .from('pedidos')
+      .select(`
+        id,
+        detalle_pedidos ( id, producto_id, cantidad )
+      `)
+      .eq('mesa_id', mesaId)
+      .neq('estado', 'cobrado');
+
+    if (errorSelect) throw errorSelect;
+
+    await devolverStockPorPedidos(pedidos || []);
+
+    const pedidoIds = (pedidos || []).map((p) => p.id);
+    if (pedidoIds.length > 0) {
+      const { error: errorDeleteDetalles } = await supabase
+        .from('detalle_pedidos')
+        .delete()
+        .in('pedido_id', pedidoIds);
+      if (errorDeleteDetalles) throw errorDeleteDetalles;
+
+      const { error: errorDeletePedidos } = await supabase
+        .from('pedidos')
+        .delete()
+        .in('id', pedidoIds);
+      if (errorDeletePedidos) throw errorDeletePedidos;
+    }
+
+    const { error: errorMesa } = await supabase
+      .from('mesas')
+      .update({ estado: 'libre' })
+      .eq('id', mesaId);
+
+    if (errorMesa) throw errorMesa;
+
+    return true;
+  } catch (error) {
+    console.error('Error cancelando mesa:', error);
+    throw error;
+  }
 };
 
 // Obtener cuenta completa de un cliente de barra
@@ -202,10 +308,10 @@ const recalcularTotalPedido = async (pedidoId) => {
       .update({ total: nuevoTotal })
       .eq('id', pedidoId);
   } else {
-    // Si no quedan items, marcar pedido como cobrado o eliminarlo
+    // Si no quedan items, eliminar el pedido (evita constraint de estados)
     await supabase
       .from('pedidos')
-      .update({ estado: 'cancelado' })
+      .delete()
       .eq('id', pedidoId);
   }
 };

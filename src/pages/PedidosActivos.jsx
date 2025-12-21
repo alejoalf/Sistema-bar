@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Container, Row, Col, Card, Badge, Button, Table, Spinner, Modal, ListGroup, Toast, ToastContainer } from 'react-bootstrap';
-import { ClipboardList, RefreshCw, ShoppingBag, Trash2, Edit2, CheckCircle } from 'lucide-react';
-import { getPedidosBarra, cobrarClienteBarra, getCuentaMesa, cobrarMesa, eliminarItemPedido, crearPedido } from '../services/pedidos';
+import { ClipboardList, RefreshCw, ShoppingBag, Trash2, Edit2, CheckCircle, XCircle } from 'lucide-react';
+import { getPedidosBarra, cobrarClienteBarra, getCuentaMesa, cobrarMesa, eliminarItemPedido, crearPedido, cancelarClienteBarra, cancelarMesa } from '../services/pedidos';
 import { getMesas } from '../services/mesas';
 import { getProductos } from '../services/productos';
 
@@ -106,6 +106,42 @@ const PedidosActivos = () => {
       await cobrarMesa(mesaId);
     } catch (error) {
       mostrarToast("Error al cobrar la mesa", "danger");
+      console.error(error);
+      // Si falla, recargar para recuperar el estado correcto
+      cargarPedidos();
+    }
+  };
+
+  const handleCancelarBarra = async (nombreCliente) => {
+    if (!confirm("¿Cancelar este pedido? Se devolverá el stock de los productos.")) return;
+    try {
+      // Actualización optimista: remover del estado inmediatamente
+      setPedidosBarra(prev => prev.filter(p => p.cliente !== nombreCliente));
+      mostrarToast(`✅ Pedido de ${nombreCliente} cancelado exitosamente`);
+      
+      // Luego hacer la llamada a la DB en segundo plano
+      await cancelarClienteBarra(nombreCliente);
+    } catch (error) {
+      mostrarToast("Error al cancelar el pedido", "danger");
+      console.error(error);
+      // Si falla, recargar para recuperar el estado correcto
+      cargarPedidos();
+    }
+  };
+
+  const handleCancelarMesa = async (mesaId) => {
+    if (!confirm("¿Cancelar toda la mesa? Se devolverá el stock y se liberará la mesa.")) return;
+    try {
+      const mesa = pedidosMesas.find(m => m.mesa.id === mesaId);
+      
+      // Primero hacer la llamada a la DB
+      await cancelarMesa(mesaId);
+      
+      // Actualización optimista: remover del estado solo si tuvo éxito
+      setPedidosMesas(prev => prev.filter(m => m.mesa.id !== mesaId));
+      mostrarToast(`✅ Mesa ${mesa?.mesa.numero_mesa} cancelada exitosamente`);
+    } catch (error) {
+      mostrarToast("Error al cancelar la mesa", "danger");
       console.error(error);
       // Si falla, recargar para recuperar el estado correcto
       cargarPedidos();
@@ -416,6 +452,13 @@ const PedidosActivos = () => {
                         Editar Pedido
                       </Button>
                       <Button 
+                        variant="outline-danger" 
+                        onClick={() => handleCancelarBarra(cliente)}
+                      >
+                        <XCircle size={18} className="me-2" />
+                        Cancelar Pedido
+                      </Button>
+                      <Button 
                         variant="success" 
                         onClick={() => handleCobrarBarra(cliente)}
                       >
@@ -485,6 +528,13 @@ const PedidosActivos = () => {
                       >
                         <Edit2 size={18} className="me-2" />
                         Editar Pedido
+                      </Button>
+                      <Button 
+                        variant="outline-danger" 
+                        onClick={() => handleCancelarMesa(mesa.id)}
+                      >
+                        <XCircle size={18} className="me-2" />
+                        Cancelar Mesa
                       </Button>
                       <Button 
                         variant="success" 

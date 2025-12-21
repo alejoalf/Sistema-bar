@@ -1,29 +1,66 @@
-import React, { useEffect, useState } from 'react';
-import { Container, Row, Col, Spinner, Alert } from 'react-bootstrap';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Container, Row, Col, Spinner, Alert, Card, Button, Form, ListGroup } from 'react-bootstrap';
 import MesaCard from '../components/mesas/MesaCard';
-import PedidoModal from '../components/pedidos/PedidoModal'; // <--- IMPORT NUEVO
+import PedidoModal from '../components/pedidos/PedidoModal';
 import { useBarStore } from '../store/useBarStore';
-import { getMesas } from '../services/mesas';
+import { getMesas, abrirMesa } from '../services/mesas';
+import { getProductos } from '../services/productos';
+import { crearPedido, cobrarMesa, cobrarPedidoBarra } from '../services/pedidos';
 
 const Salon = () => {
   const seleccionarMesa = useBarStore((state) => state.seleccionarMesa);
   const [mesas, setMesas] = useState([]);
+  const [productos, setProductos] = useState([]);
   const [loading, setLoading] = useState(true);
-  
-  // Estados para controlar el Modal
+  const [submitting, setSubmitting] = useState(false);
+  const [feedback, setFeedback] = useState(null);
+
+  // Estados para gestionar creación del pedido
+  const [selectedCategory, setSelectedCategory] = useState('');
+  const [orderItems, setOrderItems] = useState([]);
+  const [mesaAsignada, setMesaAsignada] = useState('barra');
+  const [clienteNombre, setClienteNombre] = useState('');
+  const [pagoInmediato, setPagoInmediato] = useState('despues');
+
+  // Estados para controlar el Modal existente
   const [showModal, setShowModal] = useState(false);
   const [mesaActiva, setMesaActiva] = useState(null);
   const [pedidoBarra, setPedidoBarra] = useState(null);
 
   useEffect(() => {
-    cargarMesas();
+    cargarDatosIniciales();
   }, []);
 
+  const cargarDatosIniciales = async () => {
+    try {
+      setLoading(true);
+      const [mesasData, productosData] = await Promise.all([
+        getMesas(),
+        getProductos()
+      ]);
+
+      setMesas(mesasData || []);
+      setProductos(productosData || []);
+
+      if (productosData && productosData.length > 0) {
+        setSelectedCategory(productosData[0].categoria || 'General');
+      }
+    } catch (error) {
+      console.error('Error cargando datos del salón:', error);
+      setFeedback({ tipo: 'danger', mensaje: 'Error cargando datos del salón. Intenta nuevamente.' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const cargarMesas = async () => {
-    // setLoading(true); // Comentamos esto para que no parpadee al actualizar una sola mesa
-    const data = await getMesas();
-    setMesas(data);
-    setLoading(false);
+    try {
+      const data = await getMesas();
+      setMesas(data || []);
+    } catch (error) {
+      console.error('Error actualizando mesas:', error);
+      setFeedback({ tipo: 'danger', mensaje: 'No se pudieron actualizar las mesas.' });
+    }
   };
 
   const handleMesaClick = (mesa) => {
@@ -32,22 +69,141 @@ const Salon = () => {
     setShowModal(true);  // Mostramos el modal
   };
 
-  const handleNuevoPedidoBarra = () => {
-    const nombreCliente = prompt("📝 Nombre del cliente:");
-    if (!nombreCliente || nombreCliente.trim() === '') return;
-    
-    setPedidoBarra({ 
-      esNuevo: true, 
-      cliente: nombreCliente.trim() 
-    });
-    setMesaActiva(null); // Limpiamos mesa activa
-    setShowModal(true);
-  };
-
   const cerrarModal = () => {
     setShowModal(false);
     setMesaActiva(null);
     setPedidoBarra(null);
+  };
+
+  const categorias = useMemo(() => {
+    const unique = new Set();
+    productos.forEach((producto) => {
+      const categoria = producto.categoria || 'General';
+      unique.add(categoria);
+    });
+    return Array.from(unique);
+  }, [productos]);
+
+  const productosFiltrados = useMemo(() => {
+    if (!selectedCategory) return productos;
+    return productos.filter((producto) => (producto.categoria || 'General') === selectedCategory);
+  }, [productos, selectedCategory]);
+
+  const totalPedido = useMemo(() => (
+    orderItems.reduce((sum, item) => sum + item.precio * item.cantidad, 0)
+  ), [orderItems]);
+
+  const resetPedido = () => {
+    setOrderItems([]);
+    setMesaAsignada('barra');
+    setClienteNombre('');
+    setPagoInmediato('despues');
+    setFeedback(null);
+  };
+
+  const handleAddProducto = (producto) => {
+    if (producto.stock_actual !== undefined && producto.stock_actual <= 0) {
+      setFeedback({ tipo: 'warning', mensaje: `No hay stock disponible para ${producto.nombre}.` });
+      return;
+    }
+
+    setOrderItems((prev) => {
+      const existente = prev.find((item) => item.id === producto.id);
+      if (existente) {
+        return prev.map((item) =>
+          item.id === producto.id
+            ? { ...item, cantidad: item.cantidad + 1 }
+            : item
+        );
+      }
+      return [
+        ...prev,
+        {
+          id: producto.id,
+          nombre: producto.nombre,
+          precio: producto.precio,
+          cantidad: 1,
+          producto
+        }
+      ];
+    });
+  };
+
+  const handleCambiarCantidad = (productoId, nuevaCantidad) => {
+    const cantidad = Number(nuevaCantidad);
+    setOrderItems((prev) => {
+      if (cantidad <= 0) {
+        return prev.filter((item) => item.id !== productoId);
+      }
+      return prev.map((item) =>
+        item.id === productoId ? { ...item, cantidad } : item
+      );
+    });
+  };
+
+  const handleEliminarItem = (productoId) => {
+    setOrderItems((prev) => prev.filter((item) => item.id !== productoId));
+  };
+
+  const handleConfirmarPedido = async () => {
+    if (orderItems.length === 0) {
+      setFeedback({ tipo: 'warning', mensaje: 'Agrega al menos un producto al pedido.' });
+      return;
+    }
+
+    const esBarra = mesaAsignada === 'barra';
+    const mesaSeleccionada = mesas.find((mesa) => String(mesa.id) === mesaAsignada);
+    const mesaId = esBarra ? null : mesaSeleccionada?.id;
+    const cliente = esBarra ? clienteNombre.trim() : null;
+
+    if (!esBarra && !mesaId) {
+      setFeedback({ tipo: 'warning', mensaje: 'Selecciona una mesa para el pedido.' });
+      return;
+    }
+
+    if (esBarra && !cliente) {
+      setFeedback({ tipo: 'warning', mensaje: 'Ingresa el nombre del cliente para pedidos sin mesa.' });
+      return;
+    }
+
+    const itemsParaPedido = orderItems.flatMap((item) =>
+      Array.from({ length: item.cantidad }, () => item.producto)
+    );
+
+    if (itemsParaPedido.length === 0) {
+      setFeedback({ tipo: 'warning', mensaje: 'No se pudo procesar el pedido. Intenta nuevamente.' });
+      return;
+    }
+
+    setSubmitting(true);
+
+    try {
+      if (mesaId) {
+        if (mesaSeleccionada && mesaSeleccionada.estado !== 'ocupada') {
+          await abrirMesa(mesaId);
+        }
+      }
+
+      const total = totalPedido;
+      const pedidoId = await crearPedido(mesaId, itemsParaPedido, total, cliente || null);
+
+      if (pagoInmediato === 'ahora') {
+        if (mesaId) {
+          await cobrarMesa(mesaId);
+        } else if (pedidoId) {
+          await cobrarPedidoBarra(pedidoId);
+        }
+      }
+
+      setFeedback({ tipo: 'success', mensaje: 'Pedido registrado correctamente.' });
+      resetPedido();
+      await cargarMesas();
+    } catch (error) {
+      console.error('Error confirmando pedido:', error);
+      setFeedback({ tipo: 'danger', mensaje: 'No se pudo registrar el pedido. Revisa los datos e intenta nuevamente.' });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (loading && mesas.length === 0) {
@@ -61,22 +217,200 @@ const Salon = () => {
   return (
     <Container className="py-4">
       <div className="d-flex justify-content-between align-items-center mb-4">
-        <h2>Salón Principal</h2>
-        <div className="d-flex gap-2">
-          <button className="btn btn-success" onClick={handleNuevoPedidoBarra}>
-            ➕ Nuevo Pedido
-          </button>
-          <button className="btn btn-sm btn-outline-secondary" onClick={() => cargarMesas()}>
-            🔄 Actualizar
-          </button>
+        <div>
+          <h2 className="mb-1">Crear Nuevo Pedido</h2>
+          <p className="text-muted mb-0">Gestiona pedidos para mesas o clientes de barra desde un sólo panel.</p>
         </div>
+        <div className="d-flex gap-2">
+          <Button variant="primary" onClick={resetPedido}>
+            + Nuevo Pedido
+          </Button>
+          <Button variant="outline-secondary" onClick={cargarMesas}>
+            Actualizar
+          </Button>
+        </div>
+      </div>
+
+      {feedback && (
+        <Alert variant={feedback.tipo} onClose={() => setFeedback(null)} dismissible>
+          {feedback.mensaje}
+        </Alert>
+      )}
+
+      <Row className="g-3 mb-4">
+        <Col lg={4}>
+          <Card className="h-100 shadow-sm">
+            <Card.Body>
+              <h5 className="mb-3">Menú</h5>
+              {categorias.length > 0 ? (
+                <div className="d-flex flex-wrap gap-2 mb-3">
+                  {categorias.map((categoria) => (
+                    <Button
+                      key={categoria}
+                      size="sm"
+                      variant={selectedCategory === categoria ? 'primary' : 'outline-primary'}
+                      onClick={() => setSelectedCategory(categoria)}
+                    >
+                      {categoria}
+                    </Button>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-muted">Sin categorías disponibles.</p>
+              )}
+
+              <div style={{ maxHeight: '50vh', overflowY: 'auto' }}>
+                {productosFiltrados.length === 0 ? (
+                  <p className="text-muted">No hay productos en esta categoría.</p>
+                ) : (
+                  <ListGroup>
+                    {productosFiltrados.map((producto) => (
+                      <ListGroup.Item
+                        key={producto.id}
+                        className="d-flex justify-content-between align-items-center"
+                      >
+                        <div>
+                          <div className="fw-semibold">{producto.nombre}</div>
+                          <small className="text-muted">${producto.precio}</small>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline-primary"
+                          onClick={() => handleAddProducto(producto)}
+                        >
+                          Agregar
+                        </Button>
+                      </ListGroup.Item>
+                    ))}
+                  </ListGroup>
+                )}
+              </div>
+            </Card.Body>
+          </Card>
+        </Col>
+
+        <Col lg={4}>
+          <Card className="h-100 shadow-sm">
+            <Card.Body>
+              <h5 className="mb-3">Resumen del Pedido</h5>
+              {orderItems.length === 0 ? (
+                <p className="text-muted">Todavía no agregaste productos.</p>
+              ) : (
+                <ListGroup className="mb-3">
+                  {orderItems.map((item) => (
+                    <ListGroup.Item key={item.id}>
+                      <div className="d-flex justify-content-between align-items-center mb-2">
+                        <strong>{item.nombre}</strong>
+                        <Button
+                          size="sm"
+                          variant="outline-danger"
+                          onClick={() => handleEliminarItem(item.id)}
+                        >
+                          Quitar
+                        </Button>
+                      </div>
+                      <div className="d-flex justify-content-between align-items-center">
+                        <Form.Select
+                          style={{ width: '45%' }}
+                          value={item.cantidad}
+                          onChange={(e) => handleCambiarCantidad(item.id, e.target.value)}
+                        >
+                          {Array.from({ length: 10 }, (_, idx) => idx + 1).map((value) => (
+                            <option key={value} value={value}>{value}</option>
+                          ))}
+                        </Form.Select>
+                        <span className="fw-semibold">${item.precio * item.cantidad}</span>
+                      </div>
+                    </ListGroup.Item>
+                  ))}
+                </ListGroup>
+              )}
+
+              <div className="d-flex justify-content-between align-items-center">
+                <span className="fw-semibold">Total</span>
+                <h4 className="mb-0 text-primary">${totalPedido}</h4>
+              </div>
+            </Card.Body>
+          </Card>
+        </Col>
+
+        <Col lg={4}>
+          <Card className="h-100 shadow-sm">
+            <Card.Body>
+              <h5 className="mb-3">Opciones de Asignación</h5>
+              <Form.Group className="mb-3">
+                <Form.Label>Asignar Mesa</Form.Label>
+                <Form.Select
+                  value={mesaAsignada}
+                  onChange={(e) => setMesaAsignada(e.target.value)}
+                >
+                  <option value="barra">Sin Mesa (Barra)</option>
+                  {mesas.map((mesa) => (
+                    <option value={mesa.id} key={mesa.id}>
+                      Mesa {mesa.numero_mesa} {mesa.estado === 'ocupada' ? ' - Ocupada' : ''}
+                    </option>
+                  ))}
+                </Form.Select>
+              </Form.Group>
+
+              {mesaAsignada === 'barra' && (
+                <Form.Group className="mb-3">
+                  <Form.Label>Cliente (Obligatorio)</Form.Label>
+                  <Form.Control
+                    placeholder="Nombre del cliente"
+                    value={clienteNombre}
+                    onChange={(e) => setClienteNombre(e.target.value)}
+                  />
+                </Form.Group>
+              )}
+
+              <Form.Group className="mb-3">
+                <Form.Label>Opciones de Pago</Form.Label>
+                <div className="d-flex flex-column gap-2">
+                  <Form.Check
+                    type="radio"
+                    label="Cobrar Ahora"
+                    name="opcionPago"
+                    value="ahora"
+                    checked={pagoInmediato === 'ahora'}
+                    onChange={(e) => setPagoInmediato(e.target.value)}
+                  />
+                  <Form.Check
+                    type="radio"
+                    label="Cobrar Después"
+                    name="opcionPago"
+                    value="despues"
+                    checked={pagoInmediato === 'despues'}
+                    onChange={(e) => setPagoInmediato(e.target.value)}
+                  />
+                </div>
+              </Form.Group>
+
+              <Button
+                variant="dark"
+                className="w-100"
+                disabled={submitting}
+                onClick={handleConfirmarPedido}
+              >
+                {submitting ? 'Procesando...' : 'Confirmar Pedido'}
+              </Button>
+            </Card.Body>
+          </Card>
+        </Col>
+      </Row>
+
+      <hr className="my-4" />
+
+      <div className="d-flex justify-content-between align-items-center mb-3">
+        <h3 className="mb-0">Mesas del Salón</h3>
+        <span className="text-muted">Selecciona una mesa para ver su detalle.</span>
       </div>
 
       <Row>
         {mesas.map((mesa) => (
-            <Col key={mesa.id} xs={6} md={4} lg={3} className="mb-4">
-              <MesaCard mesa={mesa} onClick={handleMesaClick} />
-            </Col>
+          <Col key={mesa.id} xs={6} md={4} lg={3} className="mb-4">
+            <MesaCard mesa={mesa} onClick={handleMesaClick} />
+          </Col>
         ))}
       </Row>
 
