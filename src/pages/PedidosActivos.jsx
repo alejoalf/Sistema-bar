@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Container, Row, Col, Card, Badge, Button, Table, Spinner, Modal, ListGroup } from 'react-bootstrap';
-import { ClipboardList, RefreshCw, ShoppingBag, Trash2, Edit2 } from 'lucide-react';
+import { Container, Row, Col, Card, Badge, Button, Table, Spinner, Modal, ListGroup, Toast, ToastContainer } from 'react-bootstrap';
+import { ClipboardList, RefreshCw, ShoppingBag, Trash2, Edit2, CheckCircle } from 'lucide-react';
 import { getPedidosBarra, cobrarClienteBarra, getCuentaMesa, cobrarMesa, eliminarItemPedido, crearPedido } from '../services/pedidos';
 import { getMesas } from '../services/mesas';
 import { getProductos } from '../services/productos';
@@ -9,6 +9,11 @@ const PedidosActivos = () => {
   const [pedidosBarra, setPedidosBarra] = useState([]);
   const [pedidosMesas, setPedidosMesas] = useState([]);
   const [loading, setLoading] = useState(true);
+  
+  // Toast notifications
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastVariant, setToastVariant] = useState('success');
   
   // Modal de edición
   const [showEditModal, setShowEditModal] = useState(false);
@@ -19,6 +24,13 @@ const PedidosActivos = () => {
   useEffect(() => {
     cargarPedidos();
   }, []);
+
+  const mostrarToast = (mensaje, variant = 'success') => {
+    setToastMessage(mensaje);
+    setToastVariant(variant);
+    setShowToast(true);
+    setTimeout(() => setShowToast(false), 3000);
+  };
 
   const cargarPedidos = async () => {
     setLoading(true);
@@ -68,22 +80,35 @@ const PedidosActivos = () => {
   const handleCobrarBarra = async (nombreCliente) => {
     if (!confirm("¿Cobrar este pedido?")) return;
     try {
+      // Actualización optimista: remover del estado inmediatamente
+      setPedidosBarra(prev => prev.filter(p => p.cliente !== nombreCliente));
+      mostrarToast(`✅ Pedido de ${nombreCliente} cobrado exitosamente`);
+      
+      // Luego hacer la llamada a la DB en segundo plano
       await cobrarClienteBarra(nombreCliente);
-      cargarPedidos();
     } catch (error) {
-      alert("Error al cobrar");
+      mostrarToast("Error al cobrar el pedido", "danger");
       console.error(error);
+      // Si falla, recargar para recuperar el estado correcto
+      cargarPedidos();
     }
   };
 
   const handleCobrarMesa = async (mesaId) => {
     if (!confirm("¿Cobrar toda la mesa?")) return;
     try {
+      const mesa = pedidosMesas.find(m => m.mesa.id === mesaId);
+      // Actualización optimista: remover del estado inmediatamente
+      setPedidosMesas(prev => prev.filter(m => m.mesa.id !== mesaId));
+      mostrarToast(`✅ Mesa ${mesa?.mesa.numero_mesa} cobrada exitosamente`);
+      
+      // Luego hacer la llamada a la DB en segundo plano
       await cobrarMesa(mesaId);
-      cargarPedidos();
     } catch (error) {
-      alert("Error al cobrar");
+      mostrarToast("Error al cobrar la mesa", "danger");
       console.error(error);
+      // Si falla, recargar para recuperar el estado correcto
+      cargarPedidos();
     }
   };
 
@@ -100,32 +125,68 @@ const PedidosActivos = () => {
   const handleEliminarItem = async (detalleId, productoId, pedidoId) => {
     if (!confirm("¿Eliminar este producto del pedido?")) return;
     try {
-      await eliminarItemPedido(detalleId, productoId, null, pedidoId);
-      
-      // Recargar los datos del modal
+      // Actualización optimista del modal
       if (pedidoEditando) {
+        const pedidosActualizados = pedidoEditando.pedidos.map(pedido => {
+          if (pedido.id === pedidoId) {
+            const nuevosDetalles = pedido.detalle_pedidos.filter(d => d.id !== detalleId);
+            const itemEliminado = pedido.detalle_pedidos.find(d => d.id === detalleId);
+            const precioEliminado = itemEliminado ? itemEliminado.cantidad * itemEliminado.precio_unitario : 0;
+            
+            return {
+              ...pedido,
+              detalle_pedidos: nuevosDetalles,
+              total: pedido.total - precioEliminado
+            };
+          }
+          return pedido;
+        }).filter(p => p.detalle_pedidos.length > 0); // Remover pedidos vacíos
+
+        setPedidoEditando({
+          ...pedidoEditando,
+          pedidos: pedidosActualizados
+        });
+
+        // Actualizar también el estado principal
         const { tipo, identificador } = pedidoEditando;
-        await cargarPedidos();
-        
         if (tipo === 'barra') {
-          const cliente = pedidosBarra.find(p => p.cliente === identificador);
-          if (cliente) {
-            setPedidoEditando({ ...pedidoEditando, pedidos: cliente.pedidos });
-          } else {
-            setShowEditModal(false);
-          }
+          setPedidosBarra(prev => prev.map(cliente => {
+            if (cliente.cliente === identificador) {
+              return {
+                ...cliente,
+                pedidos: pedidosActualizados,
+                total: pedidosActualizados.reduce((sum, p) => sum + p.total, 0)
+              };
+            }
+            return cliente;
+          }).filter(c => c.pedidos.length > 0));
         } else {
-          const mesa = pedidosMesas.find(p => p.mesa.id === identificador);
-          if (mesa) {
-            setPedidoEditando({ ...pedidoEditando, pedidos: mesa.pedidos });
-          } else {
-            setShowEditModal(false);
-          }
+          setPedidosMesas(prev => prev.map(mesaData => {
+            if (mesaData.mesa.id === identificador) {
+              return {
+                ...mesaData,
+                pedidos: pedidosActualizados,
+                total: pedidosActualizados.reduce((sum, p) => sum + p.total, 0)
+              };
+            }
+            return mesaData;
+          }).filter(m => m.pedidos.length > 0));
+        }
+
+        // Si no quedan pedidos, cerrar el modal
+        if (pedidosActualizados.length === 0) {
+          setShowEditModal(false);
         }
       }
+      
+      // Luego hacer la llamada a la DB en segundo plano
+      await eliminarItemPedido(detalleId, productoId, null, pedidoId);
+      mostrarToast("Producto eliminado correctamente");
     } catch (error) {
-      alert("Error al eliminar el item");
+      mostrarToast("Error al eliminar el producto", "danger");
       console.error(error);
+      // Si falla, recargar para recuperar el estado correcto
+      cargarPedidos();
     }
   };
 
@@ -139,31 +200,88 @@ const PedidosActivos = () => {
       const total = carrito.reduce((sum, item) => sum + item.precio, 0);
       const { tipo, identificador, mesaId } = pedidoEditando;
       
+      // Crear nuevo pedido optimista
+      const nuevoPedido = {
+        id: `temp-${Date.now()}`, // ID temporal
+        total: total,
+        created_at: new Date().toISOString(),
+        estado: 'pendiente',
+        detalle_pedidos: carrito.map(item => ({
+          id: `temp-${Date.now()}-${item.id}`,
+          producto_id: item.id,
+          cantidad: 1,
+          precio_unitario: item.precio,
+          productos: { nombre: item.nombre }
+        }))
+      };
+
+      // Actualización optimista del modal
+      const pedidosActualizados = [...pedidoEditando.pedidos, nuevoPedido];
+      setPedidoEditando({
+        ...pedidoEditando,
+        pedidos: pedidosActualizados
+      });
+
+      // Actualizar estado principal
+      if (tipo === 'barra') {
+        setPedidosBarra(prev => prev.map(cliente => {
+          if (cliente.cliente === identificador) {
+            return {
+              ...cliente,
+              pedidos: pedidosActualizados,
+              total: cliente.total + total
+            };
+          }
+          return cliente;
+        }));
+      } else {
+        setPedidosMesas(prev => prev.map(mesaData => {
+          if (mesaData.mesa.id === identificador) {
+            return {
+              ...mesaData,
+              pedidos: pedidosActualizados,
+              total: mesaData.total + total
+            };
+          }
+          return mesaData;
+        }));
+      }
+
+      setCarrito([]);
+      mostrarToast(`✅ ${carrito.length} producto(s) agregado(s) correctamente`);
+      
+      // Luego hacer la llamada a la DB en segundo plano
       if (tipo === 'barra') {
         await crearPedido(null, carrito, total, identificador);
       } else {
         await crearPedido(mesaId, carrito, total);
       }
       
-      setCarrito([]);
-      alert("✅ Productos agregados!");
-      await cargarPedidos();
-      
-      // Actualizar el modal
+      // Recargar solo los datos del pedido editado para obtener IDs reales
       if (tipo === 'barra') {
-        const cliente = pedidosBarra.find(p => p.cliente === identificador);
-        if (cliente) {
-          setPedidoEditando({ ...pedidoEditando, pedidos: cliente.pedidos });
-        }
+        const barra = await getPedidosBarra();
+        const clientePedidos = barra.filter(p => p.cliente === identificador);
+        const clienteData = {
+          cliente: identificador,
+          pedidos: clientePedidos,
+          total: clientePedidos.reduce((sum, p) => sum + p.total, 0)
+        };
+        setPedidoEditando({ ...pedidoEditando, pedidos: clienteData.pedidos });
+        setPedidosBarra(prev => prev.map(c => c.cliente === identificador ? clienteData : c));
       } else {
-        const mesa = pedidosMesas.find(p => p.mesa.id === identificador);
-        if (mesa) {
-          setPedidoEditando({ ...pedidoEditando, pedidos: mesa.pedidos });
-        }
+        const cuenta = await getCuentaMesa(mesaId);
+        const mesaData = {
+          pedidos: cuenta,
+          total: cuenta.reduce((sum, p) => sum + p.total, 0)
+        };
+        setPedidoEditando({ ...pedidoEditando, pedidos: mesaData.pedidos });
+        setPedidosMesas(prev => prev.map(m => m.mesa.id === identificador ? { ...m, ...mesaData } : m));
       }
     } catch (error) {
-      alert("Error al agregar productos");
+      mostrarToast("Error al agregar productos", "danger");
       console.error(error);
+      // Si falla, recargar para recuperar el estado correcto
+      cargarPedidos();
     }
   };
 
@@ -171,7 +289,7 @@ const PedidosActivos = () => {
     setShowEditModal(false);
     setPedidoEditando(null);
     setCarrito([]);
-    cargarPedidos();
+    // No recargar al cerrar - el estado ya está actualizado
   };
 
   if (loading) {
@@ -498,6 +616,17 @@ const PedidosActivos = () => {
           )}
         </Modal.Body>
       </Modal>
+
+      {/* Toast Notifications */}
+      <ToastContainer position="top-end" className="p-3" style={{ zIndex: 9999 }}>
+        <Toast show={showToast} onClose={() => setShowToast(false)} bg={toastVariant} delay={3000} autohide>
+          <Toast.Header>
+            <CheckCircle size={18} className="me-2" />
+            <strong className="me-auto">Notificación</strong>
+          </Toast.Header>
+          <Toast.Body className={toastVariant === 'danger' ? 'text-white' : ''}>{toastMessage}</Toast.Body>
+        </Toast>
+      </ToastContainer>
     </Container>
   );
 };
