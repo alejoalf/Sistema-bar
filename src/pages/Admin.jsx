@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Container, Row, Col, Card, Badge, Form, InputGroup, Button } from 'react-bootstrap';
+import { Container, Row, Col, Card, Badge, Form, InputGroup, Button, Alert, Modal } from 'react-bootstrap';
 import { Package, Eye, EyeOff, Search, Filter, Plus, Edit2, Trash2 } from 'lucide-react';
 import { getProductos, createProducto, updateProducto, deleteProducto, setDisponibilidadProducto } from '../services/productos';
 import ProductoModal from '../components/admin/ProductoModal';
@@ -11,6 +11,9 @@ const Admin = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [categoriaFiltro, setCategoriaFiltro] = useState('todas');
   const [soloDisponibles, setSoloDisponibles] = useState(false);
+  const [feedback, setFeedback] = useState(null);
+  const [productoAEliminar, setProductoAEliminar] = useState(null);
+  const [eliminando, setEliminando] = useState(false);
 
   useEffect(() => {
     cargar();
@@ -44,20 +47,30 @@ const Admin = () => {
       setShowModal(false);
       setEditingProd(null);
       await cargar();
+      setFeedback({ tipo: 'success', mensaje: 'Producto guardado correctamente.' });
     } catch (error) {
       console.error(error);
-      alert("Error al guardar: " + error.message);
+      setFeedback({ tipo: 'danger', mensaje: 'No se pudo guardar el producto. Intenta nuevamente.' });
     }
   };
 
-  const handleDelete = async (id) => {
-    if (confirm("¿Seguro que quieres borrar este producto?")) {
-      try {
-        await deleteProducto(id);
-        await cargar();
-      } catch (error) {
-        alert("No se pudo eliminar");
-      }
+  const handleDeleteRequest = (prod) => {
+    setProductoAEliminar(prod);
+  };
+
+  const confirmarEliminar = async () => {
+    if (!productoAEliminar) return;
+    try {
+      setEliminando(true);
+      await deleteProducto(productoAEliminar.id);
+      setProductoAEliminar(null);
+      await cargar();
+      setFeedback({ tipo: 'success', mensaje: 'Producto eliminado correctamente.' });
+    } catch (error) {
+      console.error(error);
+      setFeedback({ tipo: 'danger', mensaje: 'No se pudo eliminar el producto.' });
+    } finally {
+      setEliminando(false);
     }
   };
 
@@ -65,9 +78,10 @@ const Admin = () => {
     try {
       await setDisponibilidadProducto(prod.id, !prod.disponible);
       setProductos((prev) => prev.map((p) => p.id === prod.id ? { ...p, disponible: !prod.disponible } : p));
+      setFeedback({ tipo: 'info', mensaje: `Disponibilidad actualizada para ${prod.nombre}.` });
     } catch (error) {
       console.error(error);
-      alert('No se pudo actualizar la disponibilidad');
+      setFeedback({ tipo: 'danger', mensaje: 'No se pudo actualizar la disponibilidad.' });
     }
   };
 
@@ -114,6 +128,17 @@ const Admin = () => {
           </Button>
         </div>
       </div>
+
+      {feedback && (
+        <Alert
+          variant={feedback.tipo}
+          onClose={() => setFeedback(null)}
+          dismissible
+          className="mb-3"
+        >
+          {feedback.mensaje}
+        </Alert>
+      )}
 
       {/* Cards de Estadísticas */}
       <Row className="mb-3 mb-md-4 g-2 g-md-3">
@@ -307,7 +332,7 @@ const Admin = () => {
                           variant="link"
                           size="sm"
                           className="text-danger p-1"
-                          onClick={() => handleDelete(prod.id)}
+                          onClick={() => handleDeleteRequest(prod)}
                           title="Eliminar"
                         >
                           <Trash2 size={18} />
@@ -338,6 +363,42 @@ const Admin = () => {
         productoEditar={editingProd}
         onSave={handleSave}
       />
+
+      <Modal
+        show={Boolean(productoAEliminar)}
+        onHide={() => {
+          if (eliminando) return;
+          setProductoAEliminar(null);
+        }}
+        centered
+      >
+        <Modal.Header closeButton>
+          <Modal.Title>Eliminar producto</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {productoAEliminar ? (
+            <p className="mb-0">
+              ¿Seguro que deseas eliminar <strong>{productoAEliminar.nombre}</strong>? El producto quedará inactivo.
+            </p>
+          ) : null}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button
+            variant="secondary"
+            onClick={() => setProductoAEliminar(null)}
+            disabled={eliminando}
+          >
+            Cancelar
+          </Button>
+          <Button
+            variant="danger"
+            onClick={confirmarEliminar}
+            disabled={eliminando}
+          >
+            {eliminando ? 'Eliminando...' : 'Eliminar'}
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </Container>
   );
 };

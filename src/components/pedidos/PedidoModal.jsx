@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Modal, Button, Badge, ListGroup, Row, Col, Tab, Tabs, Table } from 'react-bootstrap';
+import { Modal, Button, Badge, ListGroup, Row, Col, Tab, Tabs, Table, Alert } from 'react-bootstrap';
 import { abrirMesa, cerrarMesa } from '../../services/mesas';
 import { getProductos } from '../../services/productos';
 import { crearPedido, getCuentaMesa, cobrarMesa, cobrarClienteBarra, getCuentaCliente } from '../../services/pedidos';
@@ -14,6 +14,7 @@ const PedidoModal = ({ show, onHide, mesa, pedidoBarra, onUpdate }) => {
   const [cuentaHistoria, setCuentaHistoria] = useState([]); 
   const [paymentModalData, setPaymentModalData] = useState(null);
   const [confirmingPayment, setConfirmingPayment] = useState(false);
+  const [errorMessage, setErrorMessage] = useState(null);
 
   const esModoBarra = !!pedidoBarra; 
 
@@ -26,6 +27,7 @@ const PedidoModal = ({ show, onHide, mesa, pedidoBarra, onUpdate }) => {
       // Resetear carrito siempre que se abre
       setCarrito([]); 
       setActiveTab('carta'); 
+      setErrorMessage(null);
     }
   }, [show, mesa, pedidoBarra]);
 
@@ -73,7 +75,8 @@ const PedidoModal = ({ show, onHide, mesa, pedidoBarra, onUpdate }) => {
       onHide(); 
       if(onUpdate) onUpdate();
     } catch (error) { 
-      alert("Error al enviar"); console.error(error);
+      console.error(error);
+      setErrorMessage('No se pudo enviar el pedido. Intenta nuevamente.');
     } finally { 
       setLoading(false); 
     }
@@ -92,7 +95,10 @@ const PedidoModal = ({ show, onHide, mesa, pedidoBarra, onUpdate }) => {
       await abrirMesa(mesa.id); 
       if(onUpdate) onUpdate(); 
       onHide(); 
-    } catch (e) { alert('Error al abrir'); } finally { setLoading(false); }
+    } catch (e) {
+      console.error(e);
+      setErrorMessage('No se pudo abrir la mesa. Intenta nuevamente.');
+    } finally { setLoading(false); }
   };
 
   const handleLiberarMesa = async () => {
@@ -103,8 +109,8 @@ const PedidoModal = ({ show, onHide, mesa, pedidoBarra, onUpdate }) => {
       if (onUpdate) onUpdate();
       onHide();
     } catch (error) {
-      alert('Error al liberar');
       console.error(error);
+      setErrorMessage('No se pudo liberar la mesa. Intenta nuevamente.');
     } finally {
       setLoading(false);
     }
@@ -128,6 +134,11 @@ const PedidoModal = ({ show, onHide, mesa, pedidoBarra, onUpdate }) => {
       </Modal.Header>
       
       <Modal.Body>
+        {errorMessage && (
+          <Alert variant="danger" dismissible onClose={() => setErrorMessage(null)} className="mb-3">
+            {errorMessage}
+          </Alert>
+        )}
         {!esModoBarra && mesa.estado === 'libre' ? (
           <div className="text-center py-5">
             <h3>Mesa Disponible</h3>
@@ -232,8 +243,8 @@ const PedidoModal = ({ show, onHide, mesa, pedidoBarra, onUpdate }) => {
             if (onUpdate) onUpdate();
             onHide();
           } catch (error) {
-            alert('Error al cobrar');
             console.error(error);
+            setErrorMessage('No se pudo cobrar el pedido. Intenta nuevamente.');
           } finally {
             setConfirmingPayment(false);
           }
