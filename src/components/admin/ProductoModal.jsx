@@ -7,7 +7,8 @@ const ProductoModal = ({ show, onHide, productoEditar, onSave }) => {
     nombre: '',
     precio: '',
     categoria: 'bebida',
-    stock_actual: 0
+    stock_actual: 0,
+    disponible: true
   });
 
   // Si nos pasan un producto para editar, llenamos el form
@@ -17,16 +18,20 @@ const ProductoModal = ({ show, onHide, productoEditar, onSave }) => {
         setFormData(productoEditar);
       } else {
         // Si es nuevo, limpiar
-        setFormData({ nombre: '', precio: '', categoria: 'bebida', stock_actual: 0 });
+        setFormData({ nombre: '', precio: '', categoria: 'bebida', stock_actual: 0, disponible: true });
       }
     }
   }, [productoEditar, show]);
 
   const handleChange = (e) => {
-    const { name, value, type } = e.target;
-    
-    // Si es número, lo convertimos; si no, lo dejamos como texto
-    const valorFinal = type === 'number' ? parseFloat(value) : value;
+    const { name, value, type, checked } = e.target;
+
+    let valorFinal = value;
+    if (type === 'number') {
+      valorFinal = parseFloat(value);
+    } else if (type === 'checkbox') {
+      valorFinal = checked;
+    }
 
     setFormData({ ...formData, [name]: valorFinal });
   };
@@ -90,6 +95,16 @@ const ProductoModal = ({ show, onHide, productoEditar, onSave }) => {
               <option value="otros">Otros</option>
             </Form.Select>
           </Form.Group>
+
+          <Form.Check
+            type="switch"
+            id="producto-disponible"
+            name="disponible"
+            label="Disponible para pedidos"
+            checked={formData.disponible}
+            onChange={handleChange}
+            className="mb-2"
+          />
 
         </Modal.Body>
         <Modal.Footer>

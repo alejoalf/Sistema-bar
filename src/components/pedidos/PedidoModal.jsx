@@ -32,7 +32,8 @@ const PedidoModal = ({ show, onHide, mesa, pedidoBarra, onUpdate }) => {
   const cargarDatos = async () => {
     try {
       const prods = await getProductos();
-      setProductos(prods || []);
+      const disponibles = (prods || []).filter(prod => prod.disponible !== false);
+      setProductos(disponibles);
       
       if (!esModoBarra && mesa?.estado === 'ocupada') {
           const historial = await getCuentaMesa(mesa.id);
@@ -50,6 +51,7 @@ const PedidoModal = ({ show, onHide, mesa, pedidoBarra, onUpdate }) => {
   };
 
   const agregarAlCarrito = (producto) => {
+    if (producto.disponible === false) return;
     setCarrito([...carrito, producto]);
   };
 
@@ -140,9 +142,14 @@ const PedidoModal = ({ show, onHide, mesa, pedidoBarra, onUpdate }) => {
                 <Col md={7} style={{ maxHeight: '50vh', overflowY: 'auto' }}>
                   <ListGroup>
                     {productos.map(prod => (
-                      <ListGroup.Item key={prod.id} action onClick={() => agregarAlCarrito(prod)} className="d-flex justify-content-between">
+                      <ListGroup.Item
+                        key={prod.id}
+                        action
+                        onClick={() => agregarAlCarrito(prod)}
+                        className="d-flex justify-content-between"
+                      >
                         <span>{prod.nombre}</span><span>${prod.precio}</span>
-                        <Button size="sm" variant="outline-primary">+</Button>
+                        <Button size="sm" variant="outline-primary" disabled={prod.disponible === false}>+</Button>
                       </ListGroup.Item>
                     ))}
                   </ListGroup>

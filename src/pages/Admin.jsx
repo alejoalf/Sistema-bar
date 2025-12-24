@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Container, Row, Col, Card, Badge, Form, InputGroup, Button } from 'react-bootstrap';
 import { Package, Eye, EyeOff, Search, Filter, Plus, Edit2, Trash2 } from 'lucide-react';
-import { getProductos, createProducto, updateProducto, deleteProducto } from '../services/productos';
+import { getProductos, createProducto, updateProducto, deleteProducto, setDisponibilidadProducto } from '../services/productos';
 import ProductoModal from '../components/admin/ProductoModal';
 
 const Admin = () => {
@@ -23,14 +23,14 @@ const Admin = () => {
 
   // Estadísticas
   const totalProductos = productos.length;
-  const productosActivos = productos.filter(p => p.activo).length;
+  const productosDisponibles = productos.filter(p => p.disponible).length;
   const productosAgotados = productos.filter(p => p.stock_actual === 0).length;
 
   // Filtrado
   const productosFiltrados = productos.filter(prod => {
     const matchSearch = prod.nombre.toLowerCase().includes(searchTerm.toLowerCase());
     const matchCategoria = categoriaFiltro === 'todas' || prod.categoria === categoriaFiltro;
-    const matchDisponible = !soloDisponibles || prod.stock_actual > 0;
+    const matchDisponible = !soloDisponibles || prod.disponible;
     return matchSearch && matchCategoria && matchDisponible;
   });
 
@@ -58,6 +58,16 @@ const Admin = () => {
       } catch (error) {
         alert("No se pudo eliminar");
       }
+    }
+  };
+
+  const handleToggleDisponibilidad = async (prod) => {
+    try {
+      await setDisponibilidadProducto(prod.id, !prod.disponible);
+      setProductos((prev) => prev.map((p) => p.id === prod.id ? { ...p, disponible: !prod.disponible } : p));
+    } catch (error) {
+      console.error(error);
+      alert('No se pudo actualizar la disponibilidad');
     }
   };
 
@@ -127,8 +137,8 @@ const Admin = () => {
             <Card.Body>
               <div className="d-flex justify-content-between align-items-center">
                 <div>
-                  <p className="text-muted mb-1 small">Activos</p>
-                  <h3 className="mb-0 fw-bold text-success">{productosActivos}</h3>
+                  <p className="text-muted mb-1 small">Disponibles</p>
+                  <h3 className="mb-0 fw-bold text-success">{productosDisponibles}</h3>
                 </div>
                 <div className="bg-success bg-opacity-10 rounded p-3">
                   <Eye size={24} className="text-success" />
@@ -212,6 +222,7 @@ const Admin = () => {
                   <th className="px-4 py-3 text-uppercase small text-muted fw-semibold">Categoría</th>
                   <th className="px-4 py-3 text-uppercase small text-muted fw-semibold">Precio</th>
                   <th className="px-4 py-3 text-uppercase small text-muted fw-semibold">Estado</th>
+                  <th className="px-4 py-3 text-uppercase small text-muted fw-semibold">Disponible</th>
                   <th className="px-4 py-3 text-uppercase small text-muted fw-semibold">Destacados</th>
                   <th className="px-4 py-3 text-uppercase small text-muted fw-semibold">Acciones</th>
                 </tr>
@@ -243,15 +254,30 @@ const Admin = () => {
                       <span className="fw-semibold">${prod.precio.toLocaleString('es-AR')}</span>
                     </td>
                     <td className="px-4 py-3">
-                      {prod.stock_actual > 0 ? (
-                        <Badge bg="success" className="px-3 py-2" style={{ fontWeight: '500' }}>
-                          Disponible
-                        </Badge>
+                      {prod.disponible ? (
+                        prod.stock_actual > 0 ? (
+                          <Badge bg="success" className="px-3 py-2" style={{ fontWeight: '500' }}>
+                            Disponible
+                          </Badge>
+                        ) : (
+                          <Badge bg="warning" text="dark" className="px-3 py-2" style={{ fontWeight: '500' }}>
+                            Sin stock
+                          </Badge>
+                        )
                       ) : (
-                        <Badge bg="danger" className="px-3 py-2" style={{ fontWeight: '500' }}>
-                          Agotado
+                        <Badge bg="secondary" className="px-3 py-2" style={{ fontWeight: '500' }}>
+                          No visible
                         </Badge>
                       )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <Form.Check
+                        type="switch"
+                        id={`disponible-${prod.id}`}
+                        checked={prod.disponible}
+                        onChange={() => handleToggleDisponibilidad(prod)}
+                        label={prod.disponible ? 'Sí' : 'No'}
+                      />
                     </td>
                     <td className="px-4 py-3">
                       {prod.stock_actual < 10 && prod.stock_actual > 0 ? (

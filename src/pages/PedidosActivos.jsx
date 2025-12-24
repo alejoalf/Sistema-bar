@@ -187,7 +187,8 @@ const PedidosActivos = () => {
   const handleEditarPedido = async (pedidos, tipo, identificador, mesaId = null) => {
     // Cargar productos disponibles
     const prods = await getProductos();
-    setProductos(prods || []);
+    const disponibles = (prods || []).filter(prod => prod.disponible !== false);
+    setProductos(disponibles);
     
     setPedidoEditando({ pedidos, tipo, identificador, mesaId });
     setCarrito([]);
@@ -263,6 +264,7 @@ const PedidosActivos = () => {
   };
 
   const agregarAlCarrito = (producto) => {
+    if (producto.disponible === false) return;
     setCarrito([...carrito, producto]);
   };
 

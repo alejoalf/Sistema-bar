@@ -41,10 +41,13 @@ const Salon = () => {
       ]);
 
       setMesas(mesasData || []);
-      setProductos(productosData || []);
+      const disponibles = (productosData || []).filter(prod => prod.disponible !== false);
+      setProductos(disponibles);
 
-      if (productosData && productosData.length > 0) {
-        setSelectedCategory(productosData[0].categoria || 'General');
+      if (disponibles.length > 0) {
+        setSelectedCategory(disponibles[0].categoria || 'General');
+      } else {
+        setSelectedCategory('');
       }
     } catch (error) {
       console.error('Error cargando datos del salón:', error);
@@ -105,6 +108,11 @@ const Salon = () => {
   };
 
   const handleAddProducto = (producto) => {
+    if (producto.disponible === false) {
+      setFeedback({ tipo: 'warning', mensaje: `${producto.nombre} no está disponible para pedidos.` });
+      return;
+    }
+
     if (producto.stock_actual !== undefined && producto.stock_actual <= 0) {
       setFeedback({ tipo: 'warning', mensaje: `No hay stock disponible para ${producto.nombre}.` });
       return;
@@ -316,6 +324,7 @@ const Salon = () => {
                           size="sm"
                           variant="outline-primary"
                           onClick={() => handleAddProducto(producto)}
+                          disabled={producto.disponible === false}
                         >
                           Agregar
                         </Button>

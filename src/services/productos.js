@@ -21,7 +21,8 @@ export const createProducto = async (producto) => {
     ...producto,
     precio: parseFloat(producto.precio),
     stock_actual: parseInt(producto.stock_actual),
-    activo: true
+    activo: true,
+    disponible: producto.disponible !== undefined ? !!producto.disponible : true
   };
 
   const { error } = await supabase
@@ -43,6 +44,7 @@ export const updateProducto = async (id, cambios) => {
   // 2. Aseguramos tipos de datos numéricos (por si el input viene como texto)
   if (datosLimpios.precio !== undefined) datosLimpios.precio = parseFloat(datosLimpios.precio);
   if (datosLimpios.stock_actual !== undefined) datosLimpios.stock_actual = parseInt(datosLimpios.stock_actual);
+  if (datosLimpios.disponible !== undefined) datosLimpios.disponible = !!datosLimpios.disponible;
 
   const { error } = await supabase
     .from('productos')
@@ -66,6 +68,18 @@ export const deleteProducto = async (id) => {
 
   if (error) {
     console.error("Error al eliminar:", error);
+    throw error;
+  }
+};
+
+export const setDisponibilidadProducto = async (id, disponible) => {
+  const { error } = await supabase
+    .from('productos')
+    .update({ disponible: !!disponible })
+    .eq('id', id);
+
+  if (error) {
+    console.error('Error actualizando disponibilidad:', error);
     throw error;
   }
 };
