@@ -138,16 +138,17 @@ const Historial = () => {
                   <th className="px-2 px-md-4 py-2 py-md-3 text-uppercase small text-muted fw-semibold d-none d-md-table-cell">ID Pedido</th>
                   <th className="px-2 px-md-4 py-2 py-md-3 text-uppercase small text-muted fw-semibold">Fecha y Hora</th>
                   <th className="px-2 px-md-4 py-2 py-md-3 text-uppercase small text-muted fw-semibold">Mesa</th>
+                  <th className="px-2 px-md-4 py-2 py-md-3 text-uppercase small text-muted fw-semibold d-none d-lg-table-cell">Pago</th>
                   <th className="px-2 px-md-4 py-2 py-md-3 text-uppercase small text-muted fw-semibold d-none d-sm-table-cell">Estado</th>
                   <th className="px-2 px-md-4 py-2 py-md-3 text-uppercase small text-muted fw-semibold text-end">Total</th>
                 </tr>
               </thead>
               <tbody>
                 {loading && ventas.length === 0 ? (
-                    <tr><td colSpan="5" className="text-center py-5">Cargando datos...</td></tr>
+                    <tr><td colSpan="6" className="text-center py-5">Cargando datos...</td></tr>
                 ) : ventas.length === 0 ? (
                   <tr>
-                    <td colSpan="5" className="text-center py-5">
+                    <td colSpan="6" className="text-center py-5">
                       <FileText size={48} className="mb-3 opacity-50 text-muted" />
                       <p className="text-muted">No hay ventas registradas aún</p>
                     </td>
@@ -190,6 +191,9 @@ const Historial = () => {
                         >
                           {venta.mesas?.numero_mesa}
                         </Badge>
+                      </td>
+                      <td className="px-2 px-md-4 py-2 py-md-3 d-none d-lg-table-cell">
+                        <span className="small text-muted text-capitalize">{venta.metodo_pago || 'Sin datos'}</span>
                       </td>
                       <td className="px-2 px-md-4 py-2 py-md-3 d-none d-sm-table-cell">
                         <Badge 
@@ -244,6 +248,14 @@ const Historial = () => {
                           <CheckCircle size={14} className="me-1" />
                           Cobrado
                         </Badge>
+                      </div>
+                    </Col>
+                  </Row>
+                  <Row className="mb-2">
+                    <Col xs={12}>
+                      <small className="text-muted">Forma de Pago</small>
+                      <div className="fw-semibold text-capitalize">
+                        {pedidoSeleccionado.metodo_pago || 'Sin datos'}
                       </div>
                     </Col>
                   </Row>

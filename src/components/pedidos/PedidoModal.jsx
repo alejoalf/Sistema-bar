@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Modal, Button, Badge, ListGroup, Row, Col, Tab, Tabs, Table } from 'react-bootstrap';
-import { abrirMesa } from '../../services/mesas';
+import { abrirMesa, cerrarMesa } from '../../services/mesas';
 import { getProductos } from '../../services/productos';
 import { crearPedido, getCuentaMesa, cobrarMesa, cobrarClienteBarra, getCuentaCliente } from '../../services/pedidos';
+import PaymentMethodModal from '../common/PaymentMethodModal';
 
 const PedidoModal = ({ show, onHide, mesa, pedidoBarra, onUpdate }) => {
   const [activeTab, setActiveTab] = useState('carta'); 
@@ -11,6 +12,8 @@ const PedidoModal = ({ show, onHide, mesa, pedidoBarra, onUpdate }) => {
   const [productos, setProductos] = useState([]);
   const [carrito, setCarrito] = useState([]); 
   const [cuentaHistoria, setCuentaHistoria] = useState([]); 
+  const [paymentModalData, setPaymentModalData] = useState(null);
+  const [confirmingPayment, setConfirmingPayment] = useState(false);
 
   const esModoBarra = !!pedidoBarra; 
 
@@ -65,7 +68,6 @@ const PedidoModal = ({ show, onHide, mesa, pedidoBarra, onUpdate }) => {
           await crearPedido(mesa.id, carrito, total);
       }
       
-      alert("✅ Pedido enviado!");
       onHide(); 
       if(onUpdate) onUpdate();
     } catch (error) { 
@@ -77,22 +79,9 @@ const PedidoModal = ({ show, onHide, mesa, pedidoBarra, onUpdate }) => {
 
   const handleCobrar = async () => {
     const total = calcularTotalCuenta();
-    if (!confirm(`¿Cobrar $${total} y cerrar?`)) return;
-    try {
-      setLoading(true);
-      if (esModoBarra) {
-          // Cobrar TODOS los pedidos del cliente
-          await cobrarClienteBarra(pedidoBarra.cliente); 
-      } else {
-          await cobrarMesa(mesa.id);
-      }
-      if(onUpdate) onUpdate(); 
-      onHide();
-    } catch (error) { 
-      alert("Error al cobrar"); console.error(error);
-    } finally { 
-      setLoading(false); 
-    }
+    if (total <= 0) return;
+    const etiqueta = esModoBarra ? pedidoBarra.cliente : `Mesa ${mesa.numero_mesa}`;
+    setPaymentModalData({ tipo: esModoBarra ? 'barra' : 'mesa', total, etiqueta });
   };
 
   const handleAbrirMesa = async () => {
@@ -102,6 +91,21 @@ const PedidoModal = ({ show, onHide, mesa, pedidoBarra, onUpdate }) => {
       if(onUpdate) onUpdate(); 
       onHide(); 
     } catch (e) { alert('Error al abrir'); } finally { setLoading(false); }
+  };
+
+  const handleLiberarMesa = async () => {
+    if (!mesa) return;
+    try {
+      setLoading(true);
+      await cerrarMesa(mesa.id);
+      if (onUpdate) onUpdate();
+      onHide();
+    } catch (error) {
+      alert('Error al liberar');
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Si no hay datos, no renderizar nada para evitar crash
@@ -158,28 +162,76 @@ const PedidoModal = ({ show, onHide, mesa, pedidoBarra, onUpdate }) => {
             {(!esModoBarra || !pedidoBarra.esNuevo) && (
                 <Tab eventKey="cuenta" title="💰 Cuenta">
                     <div className="p-3">
-                        <Table size="sm" striped>
-                            <thead><tr><th>Hora</th><th>Detalle</th><th>Total</th></tr></thead>
-                            <tbody>
+                        {cuentaHistoria.length === 0 ? (
+                          <div className="text-center py-4">
+                            <p className="text-muted mb-3">Esta mesa no tiene consumos registrados.</p>
+                            {!esModoBarra && (
+                              <Button
+                                variant="outline-secondary"
+                                size="lg"
+                                onClick={handleLiberarMesa}
+                                disabled={loading}
+                              >
+                                Liberar mesa
+                              </Button>
+                            )}
+                          </div>
+                        ) : (
+                          <>
+                            <Table size="sm" striped>
+                              <thead><tr><th>Hora</th><th>Detalle</th><th>Total</th></tr></thead>
+                              <tbody>
                                 {cuentaHistoria.map(p => (
-                                    <tr key={p.id}>
-                                        <td>{new Date(p.created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</td>
-                                        <td>{p.detalle_pedidos?.map(d => <div key={d.id || Math.random()}>• {d.cantidad}x {d.productos?.nombre}</div>)}</td>
-                                        <td className="fw-bold">${p.total}</td>
-                                    </tr>
+                                  <tr key={p.id}>
+                                    <td>{new Date(p.created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</td>
+                                    <td>{p.detalle_pedidos?.map(d => <div key={d.id || Math.random()}>• {d.cantidad}x {d.productos?.nombre}</div>)}</td>
+                                    <td className="fw-bold">${p.total}</td>
+                                  </tr>
                                 ))}
-                            </tbody>
-                        </Table>
-                        <h2 className="text-end text-primary mt-3">Total: ${calcularTotalCuenta()}</h2>
-                        <div className="text-end">
-                            <Button variant="danger" size="lg" onClick={handleCobrar} disabled={loading}>💸 COBRAR</Button>
-                        </div>
+                              </tbody>
+                            </Table>
+                            <h2 className="text-end text-primary mt-3">Total: ${calcularTotalCuenta()}</h2>
+                            <div className="text-end">
+                              <Button variant="danger" size="lg" onClick={handleCobrar} disabled={loading}>💸 COBRAR</Button>
+                            </div>
+                          </>
+                        )}
                     </div>
                 </Tab>
             )}
           </Tabs>
         )}
       </Modal.Body>
+
+      <PaymentMethodModal
+        show={Boolean(paymentModalData)}
+        title={`Seleccionar forma de pago${paymentModalData?.etiqueta ? ` · ${paymentModalData.etiqueta}` : ''}`}
+        total={paymentModalData?.total || 0}
+        confirming={confirmingPayment}
+        onCancel={() => {
+          if (confirmingPayment) return;
+          setPaymentModalData(null);
+        }}
+        onConfirm={async (metodo) => {
+          if (!metodo || !paymentModalData) return;
+          try {
+            setConfirmingPayment(true);
+            if (paymentModalData.tipo === 'barra') {
+              await cobrarClienteBarra(pedidoBarra.cliente, metodo);
+            } else if (paymentModalData.tipo === 'mesa') {
+              await cobrarMesa(mesa.id, metodo);
+            }
+            setPaymentModalData(null);
+            if (onUpdate) onUpdate();
+            onHide();
+          } catch (error) {
+            alert('Error al cobrar');
+            console.error(error);
+          } finally {
+            setConfirmingPayment(false);
+          }
+        }}
+      />
     </Modal>
   );
 };

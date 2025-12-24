@@ -2,13 +2,12 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Container, Row, Col, Spinner, Alert, Card, Button, Form, ListGroup } from 'react-bootstrap';
 import MesaCard from '../components/mesas/MesaCard';
 import PedidoModal from '../components/pedidos/PedidoModal';
-import { useBarStore } from '../store/useBarStore';
 import { getMesas, abrirMesa } from '../services/mesas';
 import { getProductos } from '../services/productos';
 import { crearPedido, cobrarMesa, cobrarPedidoBarra } from '../services/pedidos';
+import PaymentMethodModal from '../components/common/PaymentMethodModal';
 
 const Salon = () => {
-  const seleccionarMesa = useBarStore((state) => state.seleccionarMesa);
   const [mesas, setMesas] = useState([]);
   const [productos, setProductos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -21,6 +20,8 @@ const Salon = () => {
   const [mesaAsignada, setMesaAsignada] = useState('barra');
   const [clienteNombre, setClienteNombre] = useState('');
   const [pagoInmediato, setPagoInmediato] = useState('despues');
+  const [paymentContext, setPaymentContext] = useState(null);
+  const [confirmingPayment, setConfirmingPayment] = useState(false);
 
   // Estados para controlar el Modal existente
   const [showModal, setShowModal] = useState(false);
@@ -99,6 +100,8 @@ const Salon = () => {
     setClienteNombre('');
     setPagoInmediato('despues');
     setFeedback(null);
+    setPaymentContext(null);
+    setConfirmingPayment(false);
   };
 
   const handleAddProducto = (producto) => {
@@ -176,6 +179,7 @@ const Salon = () => {
     }
 
     setSubmitting(true);
+    let paymentPending = false;
 
     try {
       if (mesaId) {
@@ -188,20 +192,60 @@ const Salon = () => {
       const pedidoId = await crearPedido(mesaId, itemsParaPedido, total, cliente || null);
 
       if (pagoInmediato === 'ahora') {
-        if (mesaId) {
-          await cobrarMesa(mesaId);
-        } else if (pedidoId) {
-          await cobrarPedidoBarra(pedidoId);
-        }
+        const etiqueta = mesaId
+          ? `Mesa ${mesaSeleccionada?.numero_mesa || ''}`.trim()
+          : (cliente || 'Pedido de barra');
+
+        setPaymentContext({
+          tipo: mesaId ? 'mesa' : 'barra',
+          mesaId,
+          pedidoId,
+          etiqueta,
+          total
+        });
+        paymentPending = true;
+        return;
       }
 
-      setFeedback({ tipo: 'success', mensaje: 'Pedido registrado correctamente.' });
       resetPedido();
       await cargarMesas();
+      setFeedback({ tipo: 'success', mensaje: 'Pedido registrado correctamente.' });
     } catch (error) {
       console.error('Error confirmando pedido:', error);
       setFeedback({ tipo: 'danger', mensaje: 'No se pudo registrar el pedido. Revisa los datos e intenta nuevamente.' });
     } finally {
+      if (!paymentPending) {
+        setSubmitting(false);
+      }
+    }
+  };
+
+  const cancelarPago = () => {
+    resetPedido();
+    cargarMesas();
+    setSubmitting(false);
+    setFeedback({ tipo: 'warning', mensaje: 'Pedido registrado. El cobro queda pendiente.' });
+  };
+
+  const confirmarPago = async (metodo) => {
+    if (!paymentContext || !metodo) return;
+    try {
+      setConfirmingPayment(true);
+      if (paymentContext.tipo === 'mesa' && paymentContext.mesaId) {
+        await cobrarMesa(paymentContext.mesaId, metodo);
+      } else if (paymentContext.tipo === 'barra' && paymentContext.pedidoId) {
+        await cobrarPedidoBarra(paymentContext.pedidoId, metodo);
+      }
+
+      resetPedido();
+      await cargarMesas();
+      setFeedback({ tipo: 'success', mensaje: `Pedido cobrado (${metodo}).` });
+    } catch (error) {
+      console.error('Error cobrando pedido:', error);
+      setFeedback({ tipo: 'danger', mensaje: 'No se pudo completar el cobro. Intenta nuevamente.' });
+    } finally {
+      setConfirmingPayment(false);
+      setPaymentContext(null);
       setSubmitting(false);
     }
   };
@@ -221,14 +265,9 @@ const Salon = () => {
           <h2 className="mb-1">Crear Nuevo Pedido</h2>
           <p className="text-muted mb-0">Gestiona pedidos para mesas o clientes de barra desde un sólo panel.</p>
         </div>
-        <div className="d-flex gap-2">
-          <Button variant="primary" onClick={resetPedido}>
-            + Nuevo Pedido
-          </Button>
-          <Button variant="outline-secondary" onClick={cargarMesas}>
-            Actualizar
-          </Button>
-        </div>
+        <Button variant="outline-secondary" onClick={cargarMesas}>
+          Actualizar
+        </Button>
       </div>
 
       {feedback && (
@@ -421,6 +460,14 @@ const Salon = () => {
         mesa={mesaActiva}
         pedidoBarra={pedidoBarra}
         onUpdate={cargarMesas} // Le pasamos la función para refrescar la lista
+      />
+      <PaymentMethodModal
+        show={Boolean(paymentContext)}
+        title={`Seleccionar forma de pago${paymentContext?.etiqueta ? ` · ${paymentContext.etiqueta}` : ''}`}
+        total={paymentContext?.total || 0}
+        onCancel={cancelarPago}
+        onConfirm={confirmarPago}
+        confirming={confirmingPayment}
       />
 
     </Container>

@@ -20,6 +20,18 @@ const PedidosActivos = () => {
   const [pedidoEditando, setPedidoEditando] = useState(null);
   const [productos, setProductos] = useState([]);
   const [carrito, setCarrito] = useState([]);
+  const [showCobroModal, setShowCobroModal] = useState(false);
+  const [metodoPagoSeleccionado, setMetodoPagoSeleccionado] = useState('');
+  const [contextoCobro, setContextoCobro] = useState(null);
+  const [procesandoCobro, setProcesandoCobro] = useState(false);
+
+  const metodosPagoDisponibles = useMemo(() => ([
+    'Efectivo',
+    'Tarjeta',
+    'Transferencia',
+    'Mercado Pago',
+    'Cuenta Corriente'
+  ]), []);
 
   const totalBarraMonto = useMemo(() => pedidosBarra.reduce((sum, cliente) => sum + cliente.total, 0), [pedidosBarra]);
   const totalMesasMonto = useMemo(() => pedidosMesas.reduce((sum, mesaData) => sum + mesaData.total, 0), [pedidosMesas]);
@@ -86,38 +98,53 @@ const PedidosActivos = () => {
     }
   };
 
-  const handleCobrarBarra = async (nombreCliente) => {
-    if (!confirm("¿Cobrar este pedido?")) return;
+  const abrirModalCobro = (tipo, identificador, total, etiqueta) => {
+    setContextoCobro({ tipo, identificador, total, etiqueta });
+    setMetodoPagoSeleccionado('');
+    setShowCobroModal(true);
+  };
+
+  const cerrarCobroModal = (force = false) => {
+    if (procesandoCobro && !force) return;
+    setShowCobroModal(false);
+    setContextoCobro(null);
+    setMetodoPagoSeleccionado('');
+  };
+
+  const handleCobrarBarra = (nombreCliente, total) => {
+    abrirModalCobro('barra', nombreCliente, total, nombreCliente);
+  };
+
+  const handleCobrarMesa = (mesaId, total) => {
+    const mesaInfo = pedidosMesas.find(m => m.mesa.id === mesaId);
+    const etiqueta = mesaInfo ? `Mesa ${mesaInfo.mesa.numero_mesa}` : `Mesa ${mesaId}`;
+    abrirModalCobro('mesa', mesaId, total, etiqueta);
+  };
+
+  const confirmarCobro = async () => {
+    if (!contextoCobro || !metodoPagoSeleccionado) return;
+    let exito = false;
     try {
-      // Actualización optimista: remover del estado inmediatamente
-      setPedidosBarra(prev => prev.filter(p => p.cliente !== nombreCliente));
-      mostrarToast(`✅ Pedido de ${nombreCliente} cobrado exitosamente`);
-      
-      // Luego hacer la llamada a la DB en segundo plano
-      await cobrarClienteBarra(nombreCliente);
+      setProcesandoCobro(true);
+
+      if (contextoCobro.tipo === 'barra') {
+        await cobrarClienteBarra(contextoCobro.identificador, metodoPagoSeleccionado);
+        setPedidosBarra(prev => prev.filter(p => p.cliente !== contextoCobro.identificador));
+        mostrarToast(`✅ ${contextoCobro.etiqueta} cobrado (${metodoPagoSeleccionado})`);
+        exito = true;
+      } else {
+        await cobrarMesa(contextoCobro.identificador, metodoPagoSeleccionado);
+        setPedidosMesas(prev => prev.filter(m => m.mesa.id !== contextoCobro.identificador));
+        mostrarToast(`✅ ${contextoCobro.etiqueta} cobrada (${metodoPagoSeleccionado})`);
+        exito = true;
+      }
     } catch (error) {
       mostrarToast("Error al cobrar el pedido", "danger");
       console.error(error);
-      // Si falla, recargar para recuperar el estado correcto
       cargarPedidos();
-    }
-  };
-
-  const handleCobrarMesa = async (mesaId) => {
-    if (!confirm("¿Cobrar toda la mesa?")) return;
-    try {
-      const mesa = pedidosMesas.find(m => m.mesa.id === mesaId);
-      // Actualización optimista: remover del estado inmediatamente
-      setPedidosMesas(prev => prev.filter(m => m.mesa.id !== mesaId));
-      mostrarToast(`✅ Mesa ${mesa?.mesa.numero_mesa} cobrada exitosamente`);
-      
-      // Luego hacer la llamada a la DB en segundo plano
-      await cobrarMesa(mesaId);
-    } catch (error) {
-      mostrarToast("Error al cobrar la mesa", "danger");
-      console.error(error);
-      // Si falla, recargar para recuperar el estado correcto
-      cargarPedidos();
+    } finally {
+      setProcesandoCobro(false);
+      if (exito) cerrarCobroModal(true);
     }
   };
 
@@ -491,7 +518,7 @@ const PedidosActivos = () => {
                           <Button variant="outline-danger" onClick={() => handleCancelarBarra(cliente)}>
                             <XCircle size={16} className="me-2" /> Cancelar Pedido
                           </Button>
-                          <Button variant="success" onClick={() => handleCobrarBarra(cliente)}>
+                          <Button variant="success" onClick={() => handleCobrarBarra(cliente, total)}>
                             💸 Cobrar - ${total.toLocaleString()}
                           </Button>
                         </div>
@@ -560,7 +587,7 @@ const PedidosActivos = () => {
                           <Button variant="outline-danger" onClick={() => handleCancelarMesa(mesa.id)}>
                             <XCircle size={16} className="me-2" /> Cancelar Mesa
                           </Button>
-                          <Button variant="success" onClick={() => handleCobrarMesa(mesa.id)}>
+                          <Button variant="success" onClick={() => handleCobrarMesa(mesa.id, total)}>
                             💸 Cobrar - ${total.toLocaleString()}
                           </Button>
                         </div>
@@ -688,6 +715,57 @@ const PedidosActivos = () => {
             </>
           )}
         </Modal.Body>
+      </Modal>
+
+      {/* Modal de forma de pago */}
+      <Modal
+        show={showCobroModal}
+        onHide={cerrarCobroModal}
+        centered
+        backdrop={procesandoCobro ? 'static' : true}
+        keyboard={!procesandoCobro}
+      >
+        <Modal.Header closeButton={!procesandoCobro}>
+          <Modal.Title>Seleccionar forma de pago</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p className="text-muted">
+            Define la forma de pago para <strong>{contextoCobro?.etiqueta}</strong>.
+          </p>
+          <div className="d-flex justify-content-between align-items-center mb-3">
+            <span className="fw-semibold text-muted">Total pendiente</span>
+            <span className="fw-bold text-primary">
+              ${contextoCobro?.total ? contextoCobro.total.toLocaleString() : 0}
+            </span>
+          </div>
+          <ListGroup>
+            {metodosPagoDisponibles.map((metodo) => (
+              <ListGroup.Item
+                key={metodo}
+                action
+                active={metodoPagoSeleccionado === metodo}
+                onClick={() => setMetodoPagoSeleccionado(metodo)}
+                disabled={procesandoCobro}
+                className="d-flex justify-content-between align-items-center"
+              >
+                <span>{metodo}</span>
+                {metodoPagoSeleccionado === metodo && <CheckCircle size={16} />}
+              </ListGroup.Item>
+            ))}
+          </ListGroup>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="outline-secondary" onClick={cerrarCobroModal} disabled={procesandoCobro}>
+            Cancelar
+          </Button>
+          <Button
+            variant="success"
+            onClick={confirmarCobro}
+            disabled={!metodoPagoSeleccionado || procesandoCobro}
+          >
+            {procesandoCobro ? 'Confirmando...' : 'Confirmar cobro'}
+          </Button>
+        </Modal.Footer>
       </Modal>
 
       {/* Toast Notifications */}

@@ -85,10 +85,13 @@ export const getCuentaMesa = async (mesaId) => {
 };
 
 // Cobrar Mesa (Libera la mesa)
-export const cobrarMesa = async (mesaId) => {
+export const cobrarMesa = async (mesaId, metodoPago = null) => {
+  const updatePayload = { estado: 'cobrado' };
+  if (metodoPago) updatePayload.metodo_pago = metodoPago;
+
   const { error: errorPedidos } = await supabase
     .from('pedidos')
-    .update({ estado: 'cobrado' })
+    .update(updatePayload)
     .eq('mesa_id', mesaId)
     .neq('estado', 'cobrado');
   if (errorPedidos) throw errorPedidos;
@@ -119,19 +122,25 @@ export const getPedidosBarra = async () => {
 };
 
 // Cobrar pedido de barra específico
-export const cobrarPedidoBarra = async (pedidoId) => {
+export const cobrarPedidoBarra = async (pedidoId, metodoPago = null) => {
+  const updatePayload = { estado: 'cobrado' };
+  if (metodoPago) updatePayload.metodo_pago = metodoPago;
+
   const { error } = await supabase
     .from('pedidos')
-    .update({ estado: 'cobrado' })
+    .update(updatePayload)
     .eq('id', pedidoId);
   if (error) throw error;
 };
 
 // Cobrar todos los pedidos de un cliente de barra
-export const cobrarClienteBarra = async (nombreCliente) => {
+export const cobrarClienteBarra = async (nombreCliente, metodoPago = null) => {
+  const updatePayload = { estado: 'cobrado' };
+  if (metodoPago) updatePayload.metodo_pago = metodoPago;
+
   const { error } = await supabase
     .from('pedidos')
-    .update({ estado: 'cobrado' })
+    .update(updatePayload)
     .eq('cliente', nombreCliente)
     .is('mesa_id', null)
     .neq('estado', 'cobrado');
@@ -321,7 +330,7 @@ export const getHistorialVentas = async () => {
   const { data, error } = await supabase
     .from('pedidos')
     .select(`
-      id, created_at, total, estado, cliente,
+      id, created_at, total, estado, cliente, metodo_pago,
       mesas (numero_mesa),
       detalle_pedidos ( cantidad, precio_unitario, productos (nombre, categoria) )
     `)
