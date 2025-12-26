@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Container, Card, Row, Col, Badge, Button, Offcanvas, ListGroup, Spinner, Form } from 'react-bootstrap';
-import { FileText, DollarSign, CheckCircle, Calendar, RefreshCw, X, ShoppingBag } from 'lucide-react';
+import { FileText, DollarSign, CheckCircle, Calendar, RefreshCw, X, ShoppingBag, ArrowDownCircle } from 'lucide-react';
 import { getHistorialVentas } from '../services/pedidos';
+import { getExtracciones } from '../services/caja';
 
 // Normaliza la fecha (YYYY-MM-DD) para comparar días sin hora
 const formatearFecha = (isoString) => {
@@ -13,6 +14,7 @@ const hoyISO = () => new Date().toISOString().split('T')[0];
 
 const Historial = () => {
   const [ventas, setVentas] = useState([]);
+  const [extracciones, setExtracciones] = useState([]);
   const [loading, setLoading] = useState(true);
   const [pedidoSeleccionado, setPedidoSeleccionado] = useState(null);
   const [showSidebar, setShowSidebar] = useState(false);
@@ -22,8 +24,12 @@ const Historial = () => {
   const cargarHistorial = async () => {
     setLoading(true);
     try {
-      const data = await getHistorialVentas();
-      setVentas(data);
+      const [ventasData, extraccionesData] = await Promise.all([
+        getHistorialVentas(),
+        getExtracciones()
+      ]);
+      setVentas(ventasData || []);
+      setExtracciones(extraccionesData || []);
       setFechaSeleccionada(hoyISO());
     } catch (error) {
       console.error("Error al cargar historial:", error);
@@ -48,18 +54,36 @@ const Historial = () => {
   };
 
   const fechasDisponibles = useMemo(() => {
-    const fechas = ventas.map((venta) => formatearFecha(venta.created_at));
+    const fechas = [
+      ...ventas.map((venta) => formatearFecha(venta.created_at)),
+      ...extracciones.map((ext) => formatearFecha(ext.created_at))
+    ];
     return [...new Set(fechas)];
-  }, [ventas]);
+  }, [ventas, extracciones]);
 
   const ventasFiltradas = useMemo(() => {
     if (!fechaSeleccionada) return ventas;
     return ventas.filter((venta) => formatearFecha(venta.created_at) === fechaSeleccionada);
   }, [ventas, fechaSeleccionada]);
 
+  const extraccionesFiltradas = useMemo(() => {
+    if (!fechaSeleccionada) return extracciones;
+    return extracciones.filter((ext) => formatearFecha(ext.created_at) === fechaSeleccionada);
+  }, [extracciones, fechaSeleccionada]);
+
   // Calculamos el total vendido para el día seleccionado
   const totalVentas = ventasFiltradas.reduce((acc, curr) => acc + curr.total, 0);
   const totalMesas = ventasFiltradas.length;
+  const totalExtracciones = extraccionesFiltradas.reduce((acc, curr) => acc + Number(curr.monto || 0), 0);
+  const netoDia = totalVentas - totalExtracciones;
+
+  const timeline = useMemo(() => {
+    const ventasItems = ventasFiltradas.map((v) => ({ ...v, tipo: 'venta' }));
+    const extItems = extraccionesFiltradas.map((e) => ({ ...e, tipo: 'extraccion', total: Number(e.monto || 0) }));
+    return [...ventasItems, ...extItems].sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+  }, [ventasFiltradas, extraccionesFiltradas]);
 
   return (
     <Container fluid className="py-3 py-md-4 px-2 px-md-4" style={{ backgroundColor: '#f8f9fa', minHeight: '100vh' }}>
@@ -113,7 +137,7 @@ const Historial = () => {
 
       {/* Cards de Estadísticas */}
       <Row className="mb-3 mb-md-4 g-2 g-md-3">
-        <Col xs={12} sm={6} md={4}>
+        <Col xs={12} sm={6} md={3}>
           <Card className="border-0 shadow-sm h-100">
             <Card.Body className="p-3">
               <div className="d-flex justify-content-between align-items-center">
@@ -128,7 +152,7 @@ const Historial = () => {
             </Card.Body>
           </Card>
         </Col>
-        <Col xs={12} sm={6} md={4}>
+        <Col xs={12} sm={6} md={3}>
           <Card className="border-0 shadow-sm h-100">
             <Card.Body className="p-3">
               <div className="d-flex justify-content-between align-items-center">
@@ -143,18 +167,31 @@ const Historial = () => {
             </Card.Body>
           </Card>
         </Col>
-        <Col xs={12} sm={12} md={4}>
+        <Col xs={12} sm={6} md={3}>
           <Card className="border-0 shadow-sm h-100">
             <Card.Body className="p-3">
               <div className="d-flex justify-content-between align-items-center">
                 <div>
-                  <p className="text-muted mb-1 small">Promedio por Mesa</p>
-                  <h3 className="mb-0 fw-bold text-info fs-5">
-                    ${totalMesas > 0 ? Math.round(totalVentas / totalMesas).toLocaleString('es-AR') : 0}
-                  </h3>
+                  <p className="text-muted mb-1 small">Extracciones</p>
+                  <h3 className="mb-0 fw-bold text-danger fs-5">-${totalExtracciones.toLocaleString('es-AR')}</h3>
                 </div>
-                <div className="bg-info bg-opacity-10 rounded p-2 p-md-3">
-                  <Calendar size={20} className="text-info" />
+                <div className="bg-danger bg-opacity-10 rounded p-2 p-md-3">
+                  <ArrowDownCircle size={20} className="text-danger" />
+                </div>
+              </div>
+            </Card.Body>
+          </Card>
+        </Col>
+        <Col xs={12} sm={6} md={3}>
+          <Card className="border-0 shadow-sm h-100">
+            <Card.Body className="p-3">
+              <div className="d-flex justify-content-between align-items-center">
+                <div>
+                  <p className="text-muted mb-1 small">Neto del Día</p>
+                  <h3 className="mb-0 fw-bold text-primary fs-5">${netoDia.toLocaleString('es-AR')}</h3>
+                </div>
+                <div className="bg-primary bg-opacity-10 rounded p-2 p-md-3">
+                  <DollarSign size={20} className="text-primary" />
                 </div>
               </div>
             </Card.Body>
@@ -183,39 +220,39 @@ const Historial = () => {
                 </tr>
               </thead>
               <tbody>
-                {loading && ventasFiltradas.length === 0 ? (
+                {loading && timeline.length === 0 ? (
                     <tr><td colSpan="6" className="text-center py-5">Cargando datos...</td></tr>
-                ) : ventasFiltradas.length === 0 ? (
+                ) : timeline.length === 0 ? (
                   <tr>
                     <td colSpan="6" className="text-center py-5">
                       <FileText size={48} className="mb-3 opacity-50 text-muted" />
-                      <p className="text-muted">No hay ventas registradas aún</p>
+                      <p className="text-muted">No hay movimientos registrados aún</p>
                     </td>
                   </tr>
                 ) : (
-                  ventasFiltradas.map((venta) => (
+                  timeline.map((item) => (
                     <tr 
-                      key={venta.id} 
+                      key={`${item.tipo}-${item.id}`} 
                       style={{ 
                         borderBottom: '1px solid #f0f0f0',
                         cursor: 'pointer'
                       }}
-                      onClick={() => handleVerDetalle(venta)}
+                      onClick={() => handleVerDetalle(item)}
                       className="hover-row"
                     >
                       <td className="px-2 px-md-4 py-2 py-md-3 d-none d-md-table-cell">
-                        <span className="text-muted small">#{venta.id}</span>
+                        <span className="text-muted small">{item.tipo === 'venta' ? `#${item.id}` : `EXT-${item.id}`}</span>
                       </td>
                       <td className="px-2 px-md-4 py-2 py-md-3">
                         <div>
                           <div className="fw-semibold text-dark small">
-                            {new Date(venta.created_at).toLocaleDateString('es-AR', { 
+                            {new Date(item.created_at).toLocaleDateString('es-AR', { 
                               day: '2-digit',
                               month: '2-digit'
                             })}
                           </div>
                           <small className="text-muted" style={{ fontSize: '0.75rem' }}>
-                            {new Date(venta.created_at).toLocaleTimeString('es-AR', {
+                            {new Date(item.created_at).toLocaleTimeString('es-AR', {
                               hour: '2-digit',
                               minute: '2-digit'
                             })}
@@ -223,31 +260,62 @@ const Historial = () => {
                         </div>
                       </td>
                       <td className="px-2 px-md-4 py-2 py-md-3">
-                        <Badge 
-                          bg="secondary" 
-                          className="px-2 py-1"
-                          style={{ fontWeight: '500', fontSize: '0.75rem' }}
-                        >
-                          {venta.mesas?.numero_mesa}
-                        </Badge>
+                        {item.tipo === 'venta' ? (
+                          <Badge 
+                            bg="secondary" 
+                            className="px-2 py-1"
+                            style={{ fontWeight: '500', fontSize: '0.75rem' }}
+                          >
+                            {item.mesas?.numero_mesa}
+                          </Badge>
+                        ) : (
+                          <Badge 
+                            bg="dark" 
+                            className="px-2 py-1"
+                            style={{ fontWeight: '500', fontSize: '0.75rem' }}
+                          >
+                            Caja
+                          </Badge>
+                        )}
                       </td>
                       <td className="px-2 px-md-4 py-2 py-md-3 d-none d-lg-table-cell">
-                        <span className="small text-muted text-capitalize">{venta.metodo_pago || 'Sin datos'}</span>
+                        {item.tipo === 'venta' ? (
+                          <span className="small text-muted text-capitalize">{item.metodo_pago || 'Sin datos'}</span>
+                        ) : (
+                          <span className="small text-danger">Extracción</span>
+                        )}
                       </td>
                       <td className="px-2 px-md-4 py-2 py-md-3 d-none d-sm-table-cell">
-                        <Badge 
-                          bg="success" 
-                          className="px-2 py-1"
-                          style={{ fontWeight: '500', fontSize: '0.7rem' }}
-                        >
-                          <CheckCircle size={12} className="me-1" />
-                          Cobrado
-                        </Badge>
+                        {item.tipo === 'venta' ? (
+                          <Badge 
+                            bg="success" 
+                            className="px-2 py-1"
+                            style={{ fontWeight: '500', fontSize: '0.7rem' }}
+                          >
+                            <CheckCircle size={12} className="me-1" />
+                            Cobrado
+                          </Badge>
+                        ) : (
+                          <Badge 
+                            bg="danger" 
+                            className="px-2 py-1"
+                            style={{ fontWeight: '500', fontSize: '0.7rem' }}
+                          >
+                            <ArrowDownCircle size={12} className="me-1" />
+                            Extracción
+                          </Badge>
+                        )}
                       </td>
                       <td className="px-2 px-md-4 py-2 py-md-3 text-end">
-                        <span className="fw-semibold text-success small">
-                          ${venta.total.toLocaleString('es-AR')}
-                        </span>
+                        {item.tipo === 'venta' ? (
+                          <span className="fw-semibold text-success small">
+                            ${item.total.toLocaleString('es-AR')}
+                          </span>
+                        ) : (
+                          <span className="fw-semibold text-danger small">
+                            -${Number(item.total).toLocaleString('es-AR')}
+                          </span>
+                        )}
                       </td>
                     </tr>
                   ))
@@ -262,8 +330,17 @@ const Historial = () => {
       <Offcanvas show={showSidebar} onHide={handleCerrarSidebar} placement="end" style={{ width: '450px' }}>
         <Offcanvas.Header className="bg-dark text-white">
           <Offcanvas.Title className="d-flex align-items-center">
-            <ShoppingBag size={24} className="me-2" />
-            Detalle del Pedido #{pedidoSeleccionado?.id}
+            {pedidoSeleccionado?.tipo === 'venta' ? (
+              <>
+                <ShoppingBag size={24} className="me-2" />
+                Detalle del Pedido #{pedidoSeleccionado?.id}
+              </>
+            ) : (
+              <>
+                <ArrowDownCircle size={24} className="me-2" />
+                Extracción de Caja
+              </>
+            )}
           </Offcanvas.Title>
           <Button variant="link" className="text-white" onClick={handleCerrarSidebar}>
             <X size={24} />
@@ -272,102 +349,145 @@ const Historial = () => {
         <Offcanvas.Body>
           {pedidoSeleccionado && (
             <>
-              {/* Información General */}
-              <Card className="mb-3 border-0 shadow-sm">
-                <Card.Body>
-                  <Row className="mb-2">
-                    <Col xs={6}>
-                      <small className="text-muted">Mesa</small>
-                      <div className="fw-bold">Mesa {pedidoSeleccionado.mesas?.numero_mesa}</div>
-                    </Col>
-                    <Col xs={6}>
-                      <small className="text-muted">Estado</small>
-                      <div>
-                        <Badge bg="success" className="mt-1">
-                          <CheckCircle size={14} className="me-1" />
-                          Cobrado
-                        </Badge>
-                      </div>
-                    </Col>
-                  </Row>
-                  <Row className="mb-2">
-                    <Col xs={12}>
-                      <small className="text-muted">Forma de Pago</small>
-                      <div className="fw-semibold text-capitalize">
-                        {pedidoSeleccionado.metodo_pago || 'Sin datos'}
-                      </div>
-                    </Col>
-                  </Row>
-                  <Row>
-                    <Col xs={12}>
-                      <small className="text-muted">Fecha y Hora</small>
-                      <div className="fw-semibold">
-                        {new Date(pedidoSeleccionado.created_at).toLocaleDateString('es-AR', {
-                          day: '2-digit',
-                          month: 'long',
-                          year: 'numeric'
-                        })}
-                      </div>
-                      <small className="text-muted">
-                        {new Date(pedidoSeleccionado.created_at).toLocaleTimeString('es-AR', {
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}
-                      </small>
-                    </Col>
-                  </Row>
-                </Card.Body>
-              </Card>
-
-              {/* Productos del Pedido */}
-              <div className="mb-3">
-                <h6 className="text-muted text-uppercase mb-3" style={{ fontSize: '0.85rem', letterSpacing: '0.5px' }}>
-                  Productos Consumidos
-                </h6>
-                <ListGroup variant="flush">
-                  {pedidoSeleccionado.detalle_pedidos?.map((detalle) => (
-                    <ListGroup.Item 
-                      key={detalle.id} 
-                      className="d-flex justify-content-between align-items-start px-0 py-3"
-                    >
-                      <div className="flex-grow-1">
-                        <div className="fw-semibold text-dark mb-1">
-                          {detalle.productos?.nombre}
-                        </div>
-                        <div className="d-flex align-items-center gap-2">
-                          <Badge 
-                            bg="light" 
-                            text="dark" 
-                            className="text-capitalize"
-                          >
-                            {detalle.productos?.categoria}
-                          </Badge>
+              {pedidoSeleccionado.tipo === 'venta' ? (
+                <>
+                  <Card className="mb-3 border-0 shadow-sm">
+                    <Card.Body>
+                      <Row className="mb-2">
+                        <Col xs={6}>
+                          <small className="text-muted">Mesa</small>
+                          <div className="fw-bold">Mesa {pedidoSeleccionado.mesas?.numero_mesa}</div>
+                        </Col>
+                        <Col xs={6}>
+                          <small className="text-muted">Estado</small>
+                          <div>
+                            <Badge bg="success" className="mt-1">
+                              <CheckCircle size={14} className="me-1" />
+                              Cobrado
+                            </Badge>
+                          </div>
+                        </Col>
+                      </Row>
+                      <Row className="mb-2">
+                        <Col xs={12}>
+                          <small className="text-muted">Forma de Pago</small>
+                          <div className="fw-semibold text-capitalize">
+                            {pedidoSeleccionado.metodo_pago || 'Sin datos'}
+                          </div>
+                        </Col>
+                      </Row>
+                      <Row>
+                        <Col xs={12}>
+                          <small className="text-muted">Fecha y Hora</small>
+                          <div className="fw-semibold">
+                            {new Date(pedidoSeleccionado.created_at).toLocaleDateString('es-AR', {
+                              day: '2-digit',
+                              month: 'long',
+                              year: 'numeric'
+                            })}
+                          </div>
                           <small className="text-muted">
-                            ${detalle.precio_unitario.toLocaleString('es-AR')} × {detalle.cantidad}
+                            {new Date(pedidoSeleccionado.created_at).toLocaleTimeString('es-AR', {
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
                           </small>
-                        </div>
-                      </div>
-                      <div className="text-end">
-                        <div className="fw-bold text-dark">
-                          ${(detalle.precio_unitario * detalle.cantidad).toLocaleString('es-AR')}
-                        </div>
-                      </div>
-                    </ListGroup.Item>
-                  ))}
-                </ListGroup>
-              </div>
+                        </Col>
+                      </Row>
+                    </Card.Body>
+                  </Card>
 
-              {/* Total */}
-              <Card className="bg-light border-0">
-                <Card.Body>
-                  <div className="d-flex justify-content-between align-items-center">
-                    <h5 className="mb-0">Total Cobrado</h5>
-                    <h4 className="mb-0 text-success fw-bold">
-                      ${pedidoSeleccionado.total.toLocaleString('es-AR')}
-                    </h4>
+                  <div className="mb-3">
+                    <h6 className="text-muted text-uppercase mb-3" style={{ fontSize: '0.85rem', letterSpacing: '0.5px' }}>
+                      Productos Consumidos
+                    </h6>
+                    <ListGroup variant="flush">
+                      {pedidoSeleccionado.detalle_pedidos?.map((detalle) => (
+                        <ListGroup.Item 
+                          key={detalle.id} 
+                          className="d-flex justify-content-between align-items-start px-0 py-3"
+                        >
+                          <div className="flex-grow-1">
+                            <div className="fw-semibold text-dark mb-1">
+                              {detalle.productos?.nombre}
+                            </div>
+                            <div className="d-flex align-items-center gap-2">
+                              <Badge 
+                                bg="light" 
+                                text="dark" 
+                                className="text-capitalize"
+                              >
+                                {detalle.productos?.categoria}
+                              </Badge>
+                              <small className="text-muted">
+                                ${detalle.precio_unitario.toLocaleString('es-AR')} × {detalle.cantidad}
+                              </small>
+                            </div>
+                          </div>
+                          <div className="text-end">
+                            <div className="fw-bold text-dark">
+                              ${(detalle.precio_unitario * detalle.cantidad).toLocaleString('es-AR')}
+                            </div>
+                          </div>
+                        </ListGroup.Item>
+                      ))}
+                    </ListGroup>
                   </div>
-                </Card.Body>
-              </Card>
+
+                  <Card className="bg-light border-0">
+                    <Card.Body>
+                      <div className="d-flex justify-content-between align-items-center">
+                        <h5 className="mb-0">Total Cobrado</h5>
+                        <h4 className="mb-0 text-success fw-bold">
+                          ${pedidoSeleccionado.total.toLocaleString('es-AR')}
+                        </h4>
+                      </div>
+                    </Card.Body>
+                  </Card>
+                </>
+              ) : (
+                <>
+                  <Card className="mb-3 border-0 shadow-sm">
+                    <Card.Body>
+                      <Row className="mb-2">
+                        <Col xs={12}>
+                          <small className="text-muted">Motivo</small>
+                          <div className="fw-bold">{pedidoSeleccionado.motivo || 'Extracción de caja'}</div>
+                        </Col>
+                      </Row>
+                      <Row className="mb-2">
+                        <Col xs={12}>
+                          <small className="text-muted">Registrado</small>
+                          <div className="fw-semibold">
+                            {new Date(pedidoSeleccionado.created_at).toLocaleDateString('es-AR', {
+                              day: '2-digit',
+                              month: 'long',
+                              year: 'numeric'
+                            })}
+                          </div>
+                          <small className="text-muted">
+                            {new Date(pedidoSeleccionado.created_at).toLocaleTimeString('es-AR', {
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </small>
+                        </Col>
+                      </Row>
+                    </Card.Body>
+                  </Card>
+
+                  <Card className="bg-light border-0">
+                    <Card.Body>
+                      <div className="d-flex justify-content-between align-items-center">
+                        <h5 className="mb-0">Monto Extraído</h5>
+                        <h4 className="mb-0 text-danger fw-bold">
+                          -${Number(pedidoSeleccionado.total).toLocaleString('es-AR')}
+                        </h4>
+                      </div>
+                    </Card.Body>
+                  </Card>
+                </>
+              )}
             </>
           )}
         </Offcanvas.Body>

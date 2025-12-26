@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Container, Row, Col, Spinner, Alert, Card, Button, Form, ListGroup } from 'react-bootstrap';
+import { Container, Row, Col, Spinner, Alert, Card, Button, Form, ListGroup, Modal } from 'react-bootstrap';
 import MesaCard from '../components/mesas/MesaCard';
 import PedidoModal from '../components/pedidos/PedidoModal';
 import { getMesas, abrirMesa } from '../services/mesas';
 import { getProductos } from '../services/productos';
 import { crearPedido, cobrarMesa, cobrarPedidoBarra } from '../services/pedidos';
 import PaymentMethodModal from '../components/common/PaymentMethodModal';
+import { registrarExtraccion } from '../services/caja';
 
 const Salon = () => {
   const [mesas, setMesas] = useState([]);
@@ -22,6 +23,11 @@ const Salon = () => {
   const [pagoInmediato, setPagoInmediato] = useState('despues');
   const [paymentContext, setPaymentContext] = useState(null);
   const [confirmingPayment, setConfirmingPayment] = useState(false);
+
+  const [showExtraccionModal, setShowExtraccionModal] = useState(false);
+  const [extraccionMonto, setExtraccionMonto] = useState('');
+  const [extraccionMotivo, setExtraccionMotivo] = useState('');
+  const [savingExtraccion, setSavingExtraccion] = useState(false);
 
   // Estados para controlar el Modal existente
   const [showModal, setShowModal] = useState(false);
@@ -259,6 +265,37 @@ const Salon = () => {
     }
   };
 
+  const abrirModalExtraccion = () => {
+    setExtraccionMonto('');
+    setExtraccionMotivo('');
+    setShowExtraccionModal(true);
+  };
+
+  const registrarExtraccionCaja = async () => {
+    const monto = Number(extraccionMonto);
+    if (!monto || monto <= 0) {
+      setFeedback({ tipo: 'warning', mensaje: 'Ingresa un monto válido para la extracción.' });
+      return;
+    }
+    if (!extraccionMotivo.trim()) {
+      setFeedback({ tipo: 'warning', mensaje: 'Describe el motivo de la extracción.' });
+      return;
+    }
+    try {
+      setSavingExtraccion(true);
+      await registrarExtraccion(monto, extraccionMotivo.trim());
+      setFeedback({ tipo: 'success', mensaje: 'Extracción registrada en caja.' });
+      setExtraccionMonto('');
+      setExtraccionMotivo('');
+      setShowExtraccionModal(false);
+    } catch (error) {
+      console.error('Error registrando extracción:', error);
+      setFeedback({ tipo: 'danger', mensaje: 'No se pudo registrar la extracción. Intenta nuevamente.' });
+    } finally {
+      setSavingExtraccion(false);
+    }
+  };
+
   if (loading && mesas.length === 0) {
     return (
       <Container className="d-flex justify-content-center align-items-center" style={{ height: '50vh' }}>
@@ -274,9 +311,14 @@ const Salon = () => {
           <h2 className="mb-1">Crear Nuevo Pedido</h2>
           <p className="text-muted mb-0">Gestiona pedidos para mesas o clientes de barra desde un sólo panel.</p>
         </div>
-        <Button variant="outline-secondary" onClick={cargarMesas}>
-          Actualizar
-        </Button>
+        <div className="d-flex gap-2">
+          <Button variant="dark" onClick={abrirModalExtraccion}>
+            Extracción de Caja
+          </Button>
+          <Button variant="outline-secondary" onClick={cargarMesas}>
+            Actualizar
+          </Button>
+        </div>
       </div>
 
       {feedback && (
@@ -480,6 +522,46 @@ const Salon = () => {
         onConfirm={confirmarPago}
         confirming={confirmingPayment}
       />
+
+      {/* Modal de Extracción */}
+      <Modal show={showExtraccionModal} onHide={() => setShowExtraccionModal(false)} centered>
+        <Modal.Header closeButton={!savingExtraccion}>
+          <Modal.Title>Registrar Extracción</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <Form.Group className="mb-3">
+            <Form.Label>Monto a extraer</Form.Label>
+            <Form.Control
+              type="number"
+              min="0"
+              step="0.01"
+              value={extraccionMonto}
+              onChange={(e) => setExtraccionMonto(e.target.value)}
+              placeholder="0"
+              disabled={savingExtraccion}
+            />
+          </Form.Group>
+          <Form.Group>
+            <Form.Label>Motivo</Form.Label>
+            <Form.Control
+              as="textarea"
+              rows={3}
+              value={extraccionMotivo}
+              onChange={(e) => setExtraccionMotivo(e.target.value)}
+              placeholder="Ej: Cambio, depósito, gastos menores"
+              disabled={savingExtraccion}
+            />
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="outline-secondary" onClick={() => setShowExtraccionModal(false)} disabled={savingExtraccion}>
+            Cancelar
+          </Button>
+          <Button variant="danger" onClick={registrarExtraccionCaja} disabled={savingExtraccion}>
+            {savingExtraccion ? 'Guardando...' : 'Registrar extracción'}
+          </Button>
+        </Modal.Footer>
+      </Modal>
 
     </Container>
   );
