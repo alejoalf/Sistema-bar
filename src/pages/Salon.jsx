@@ -209,7 +209,8 @@ const Salon = () => {
           mesaId,
           pedidoId,
           etiqueta,
-          total
+          total,
+          mantenerOcupada: Boolean(mesaId) // si es mesa y cobro ahora, mantenerla ocupada pero pagada
         });
         paymentPending = true;
         return;
@@ -240,7 +241,7 @@ const Salon = () => {
     try {
       setConfirmingPayment(true);
       if (paymentContext.tipo === 'mesa' && paymentContext.mesaId) {
-        await cobrarMesa(paymentContext.mesaId, metodo);
+        await cobrarMesa(paymentContext.mesaId, metodo, paymentContext.mantenerOcupada);
       } else if (paymentContext.tipo === 'barra' && paymentContext.pedidoId) {
         await cobrarPedidoBarra(paymentContext.pedidoId, metodo);
       }
@@ -395,7 +396,8 @@ const Salon = () => {
                   <option value="barra">Sin Mesa (Barra)</option>
                   {mesas.map((mesa) => (
                     <option value={mesa.id} key={mesa.id}>
-                      Mesa {mesa.numero_mesa} {mesa.estado === 'ocupada' ? ' - Ocupada' : ''}
+                      Mesa {mesa.numero_mesa}
+                      {mesa.estado === 'ocupada' ? ' - Ocupada' : ''}
                     </option>
                   ))}
                 </Form.Select>

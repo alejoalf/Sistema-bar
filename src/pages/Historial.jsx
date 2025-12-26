@@ -1,13 +1,22 @@
-import React, { useEffect, useState } from 'react';
-import { Container, Card, Row, Col, Badge, Button, Offcanvas, ListGroup, Spinner } from 'react-bootstrap';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Container, Card, Row, Col, Badge, Button, Offcanvas, ListGroup, Spinner, Form } from 'react-bootstrap';
 import { FileText, DollarSign, CheckCircle, Calendar, RefreshCw, X, ShoppingBag } from 'lucide-react';
 import { getHistorialVentas } from '../services/pedidos';
+
+// Normaliza la fecha (YYYY-MM-DD) para comparar días sin hora
+const formatearFecha = (isoString) => {
+  if (!isoString) return '';
+  return new Date(isoString).toISOString().split('T')[0];
+};
+
+const hoyISO = () => new Date().toISOString().split('T')[0];
 
 const Historial = () => {
   const [ventas, setVentas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [pedidoSeleccionado, setPedidoSeleccionado] = useState(null);
   const [showSidebar, setShowSidebar] = useState(false);
+  const [fechaSeleccionada, setFechaSeleccionada] = useState(null);
 
   // 1. DEFINIMOS LA FUNCIÓN PRIMERO (Para evitar errores de referencia)
   const cargarHistorial = async () => {
@@ -15,6 +24,7 @@ const Historial = () => {
     try {
       const data = await getHistorialVentas();
       setVentas(data);
+      setFechaSeleccionada(hoyISO());
     } catch (error) {
       console.error("Error al cargar historial:", error);
     } finally {
@@ -37,9 +47,19 @@ const Historial = () => {
     setTimeout(() => setPedidoSeleccionado(null), 300);
   };
 
-  // Calculamos el total vendido
-  const totalVentas = ventas.reduce((acc, curr) => acc + curr.total, 0);
-  const totalMesas = ventas.length;
+  const fechasDisponibles = useMemo(() => {
+    const fechas = ventas.map((venta) => formatearFecha(venta.created_at));
+    return [...new Set(fechas)];
+  }, [ventas]);
+
+  const ventasFiltradas = useMemo(() => {
+    if (!fechaSeleccionada) return ventas;
+    return ventas.filter((venta) => formatearFecha(venta.created_at) === fechaSeleccionada);
+  }, [ventas, fechaSeleccionada]);
+
+  // Calculamos el total vendido para el día seleccionado
+  const totalVentas = ventasFiltradas.reduce((acc, curr) => acc + curr.total, 0);
+  const totalMesas = ventasFiltradas.length;
 
   return (
     <Container fluid className="py-3 py-md-4 px-2 px-md-4" style={{ backgroundColor: '#f8f9fa', minHeight: '100vh' }}>
@@ -58,23 +78,37 @@ const Historial = () => {
       
       {/* Header */}
       <div className="mb-3 mb-md-4">
-        <div className="d-flex flex-column flex-md-row justify-content-between align-items-start mb-2">
-          <div className="mb-3 mb-md-0">
-            <h2 className="mb-1 fw-bold fs-4 fs-md-2" style={{ color: '#2d3748' }}>
-              <FileText size={24} className="me-2 d-none d-md-inline" />
-              Historial de Ventas
-            </h2>
-            <p className="text-muted mb-0 small">Registro completo de transacciones cobradas</p>
+          <div className="d-flex flex-column flex-md-row justify-content-between align-items-start mb-2">
+            <div className="mb-3 mb-md-0">
+              <h2 className="mb-1 fw-bold fs-4 fs-md-2" style={{ color: '#2d3748' }}>
+                <FileText size={24} className="me-2 d-none d-md-inline" />
+                Historial de Ventas
+              </h2>
+              <p className="text-muted mb-0 small">Visualiza las ventas por día</p>
+            </div>
+            <div className="d-flex flex-column flex-md-row gap-2 align-items-start align-items-md-center">
+              <Form.Select
+                size="sm"
+                value={fechaSeleccionada || ''}
+                onChange={(e) => setFechaSeleccionada(e.target.value || null)}
+                style={{ minWidth: '170px' }}
+              >
+                <option value="">Todas las fechas</option>
+                {fechasDisponibles.map((fecha) => (
+                  <option key={fecha} value={fecha}>{fecha}</option>
+                ))}
+              </Form.Select>
+              <Button 
+                variant="outline-secondary"
+                onClick={cargarHistorial}
+                disabled={loading}
+                className="w-100 w-md-auto"
+              >
+                {loading ? <Spinner animation="border" size="sm" className="me-1"/> : <RefreshCw size={18} className="me-1" />}
+                {loading ? 'Cargando...' : 'Actualizar'}
+              </Button>
+            </div>
           </div>
-          <Button 
-            variant="outline-secondary"
-            onClick={cargarHistorial}
-            disabled={loading}
-          >
-            {loading ? <Spinner animation="border" size="sm" className="me-1"/> : <RefreshCw size={18} className="me-1" />}
-            {loading ? 'Cargando...' : 'Actualizar'}
-          </Button>
-        </div>
       </div>
 
       {/* Cards de Estadísticas */}
@@ -131,6 +165,11 @@ const Historial = () => {
       {/* Tabla de Ventas */}
       <Card className="border-0 shadow-sm">
         <Card.Body className="p-0">
+          {fechaSeleccionada && (
+            <div className="px-3 pt-3 text-muted small">
+              Mostrando ventas de {fechaSeleccionada}
+            </div>
+          )}
           <div className="table-responsive">
             <table className="table table-hover mb-0" style={{ fontSize: '0.95rem' }}>
               <thead style={{ backgroundColor: '#f7fafc', borderBottom: '2px solid #e2e8f0' }}>
@@ -144,9 +183,9 @@ const Historial = () => {
                 </tr>
               </thead>
               <tbody>
-                {loading && ventas.length === 0 ? (
+                {loading && ventasFiltradas.length === 0 ? (
                     <tr><td colSpan="6" className="text-center py-5">Cargando datos...</td></tr>
-                ) : ventas.length === 0 ? (
+                ) : ventasFiltradas.length === 0 ? (
                   <tr>
                     <td colSpan="6" className="text-center py-5">
                       <FileText size={48} className="mb-3 opacity-50 text-muted" />
@@ -154,7 +193,7 @@ const Historial = () => {
                     </td>
                   </tr>
                 ) : (
-                  ventas.map((venta) => (
+                  ventasFiltradas.map((venta) => (
                     <tr 
                       key={venta.id} 
                       style={{ 

@@ -8,7 +8,6 @@ import Admin from './pages/Admin';
 import Login from './pages/Login';
 import { useBarStore } from './store/useBarStore';
 import Historial from './pages/Historial';
-import CierreCaja from './pages/CierreCaja';
 import PedidosActivos from './pages/PedidosActivos';
 
 // Componente para Rutas Protegidas
@@ -62,7 +61,6 @@ function App() {
                 <Route path="/" element={<Salon />} />
                 <Route path="/pedidos" element={<PedidosActivos />} />
                 <Route path="/historial" element={<Historial />} />
-                <Route path="/cierre" element={<CierreCaja />} />
                 <Route path="/admin" element={<Admin />} />
               </Routes>
             </DashboardLayout>

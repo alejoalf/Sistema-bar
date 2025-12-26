@@ -1,6 +1,6 @@
 import React from 'react';
 import { Nav } from 'react-bootstrap';
-import { LayoutDashboard, ClipboardList, FileText, Settings, DollarSign } from 'lucide-react';
+import { LayoutDashboard, ClipboardList, FileText, Settings } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 
 const NavigationLinks = ({ onLinkClick, mobile = false }) => {
@@ -40,13 +40,6 @@ const NavigationLinks = ({ onLinkClick, mobile = false }) => {
         onClick={handleClick}
       >
         <FileText size={20} /> Historial
-      </Link>
-      <Link 
-        to="/cierre" 
-        className={`${linkStyle} ${isActive('/cierre') ? activeStyle : inactiveStyle}`}
-        onClick={handleClick}
-      >
-        <DollarSign size={20} /> Cierre de Caja
       </Link>
       <Link 
         to="/admin" 

@@ -21,7 +21,7 @@ const PedidoModal = ({ show, onHide, mesa, pedidoBarra, onUpdate }) => {
   useEffect(() => {
     if (show) {
       // Cargar datos solo si el modal está visible
-      if ((mesa && mesa.estado === 'ocupada') || esModoBarra) {
+        if ((mesa && mesa.estado === 'ocupada') || esModoBarra) {
          cargarDatos();
       }
       // Resetear carrito siempre que se abre
@@ -37,7 +37,7 @@ const PedidoModal = ({ show, onHide, mesa, pedidoBarra, onUpdate }) => {
       const disponibles = (prods || []).filter(prod => prod.disponible !== false);
       setProductos(disponibles);
       
-      if (!esModoBarra && mesa?.estado === 'ocupada') {
+          if (!esModoBarra && mesa?.estado === 'ocupada') {
           const historial = await getCuentaMesa(mesa.id);
           setCuentaHistoria(historial || []);
       } else if (esModoBarra && !pedidoBarra.esNuevo) {

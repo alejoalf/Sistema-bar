@@ -84,8 +84,9 @@ export const getCuentaMesa = async (mesaId) => {
   return data;
 };
 
-// Cobrar Mesa (Libera la mesa)
-export const cobrarMesa = async (mesaId, metodoPago = null) => {
+// Cobrar Mesa
+// Si mantenerOcupada es true, marcamos la mesa como "pagado" para poder liberarla manualmente luego.
+export const cobrarMesa = async (mesaId, metodoPago = null, mantenerOcupada = false) => {
   const updatePayload = { estado: 'cobrado' };
   if (metodoPago) updatePayload.metodo_pago = metodoPago;
 
@@ -96,9 +97,12 @@ export const cobrarMesa = async (mesaId, metodoPago = null) => {
     .neq('estado', 'cobrado');
   if (errorPedidos) throw errorPedidos;
 
+  // Mantener ocupada (ya pagada) para poder liberarla manualmente después
+  const nuevoEstadoMesa = mantenerOcupada ? 'ocupada' : 'libre';
+
   const { error: errorMesa } = await supabase
     .from('mesas')
-    .update({ estado: 'libre' })
+    .update({ estado: nuevoEstadoMesa })
     .eq('id', mesaId);
   if (errorMesa) throw errorMesa;
 };
