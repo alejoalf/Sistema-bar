@@ -24,6 +24,7 @@ const PedidosActivos = () => {
   const [metodoPagoSeleccionado, setMetodoPagoSeleccionado] = useState('');
   const [contextoCobro, setContextoCobro] = useState(null);
   const [procesandoCobro, setProcesandoCobro] = useState(false);
+  const [confirmacion, setConfirmacion] = useState({ show: false, titulo: '', mensaje: '', onConfirm: null });
 
   const metodosPagoDisponibles = useMemo(() => ([
     'Efectivo',
@@ -51,6 +52,18 @@ const PedidosActivos = () => {
     setToastVariant(variant);
     setShowToast(true);
     setTimeout(() => setShowToast(false), 3000);
+  };
+
+  const pedirConfirmacion = (mensaje, onConfirm, titulo = 'Confirmar') => {
+    setConfirmacion({ show: true, titulo, mensaje, onConfirm });
+  };
+
+  const cancelarConfirmacion = () => setConfirmacion({ show: false, titulo: '', mensaje: '', onConfirm: null });
+
+  const ejecutarConfirmacion = async () => {
+    const { onConfirm } = confirmacion;
+    cancelarConfirmacion();
+    if (onConfirm) await onConfirm();
   };
 
   const cargarPedidos = async () => {
@@ -149,39 +162,39 @@ const PedidosActivos = () => {
   };
 
   const handleCancelarBarra = async (nombreCliente) => {
-    if (!confirm("¿Cancelar este pedido? Se devolverá el stock de los productos.")) return;
-    try {
-      // Actualización optimista: remover del estado inmediatamente
-      setPedidosBarra(prev => prev.filter(p => p.cliente !== nombreCliente));
-      mostrarToast(`✅ Pedido de ${nombreCliente} cancelado exitosamente`);
-      
-      // Luego hacer la llamada a la DB en segundo plano
-      await cancelarClienteBarra(nombreCliente);
-    } catch (error) {
-      mostrarToast("Error al cancelar el pedido", "danger");
-      console.error(error);
-      // Si falla, recargar para recuperar el estado correcto
-      cargarPedidos();
-    }
+    pedirConfirmacion(
+      '¿Cancelar este pedido? Se devolverá el stock de los productos.',
+      async () => {
+        try {
+          setPedidosBarra(prev => prev.filter(p => p.cliente !== nombreCliente));
+          mostrarToast(`✅ Pedido de ${nombreCliente} cancelado exitosamente`);
+          await cancelarClienteBarra(nombreCliente);
+        } catch (error) {
+          mostrarToast("Error al cancelar el pedido", "danger");
+          console.error(error);
+          cargarPedidos();
+        }
+      }
+    );
   };
 
   const handleCancelarMesa = async (mesaId) => {
-    if (!confirm("¿Cancelar toda la mesa? Se devolverá el stock y se liberará la mesa.")) return;
-    try {
-      const mesa = pedidosMesas.find(m => m.mesa.id === mesaId);
-      
-      // Primero hacer la llamada a la DB
-      await cancelarMesa(mesaId);
-      
-      // Actualización optimista: remover del estado solo si tuvo éxito
-      setPedidosMesas(prev => prev.filter(m => m.mesa.id !== mesaId));
-      mostrarToast(`✅ Mesa ${mesa?.mesa.numero_mesa} cancelada exitosamente`);
-    } catch (error) {
-      mostrarToast("Error al cancelar la mesa", "danger");
-      console.error(error);
-      // Si falla, recargar para recuperar el estado correcto
-      cargarPedidos();
-    }
+    const mesa = pedidosMesas.find(m => m.mesa.id === mesaId);
+    const numeroMesa = mesa?.mesa.numero_mesa;
+    pedirConfirmacion(
+      '¿Cancelar toda la mesa? Se devolverá el stock y se liberará la mesa.',
+      async () => {
+        try {
+          await cancelarMesa(mesaId);
+          setPedidosMesas(prev => prev.filter(m => m.mesa.id !== mesaId));
+          mostrarToast(`✅ Mesa ${numeroMesa ?? mesaId} cancelada exitosamente`);
+        } catch (error) {
+          mostrarToast("Error al cancelar la mesa", "danger");
+          console.error(error);
+          cargarPedidos();
+        }
+      }
+    );
   };
 
   const handleEditarPedido = async (pedidos, tipo, identificador, mesaId = null) => {
@@ -196,71 +209,69 @@ const PedidosActivos = () => {
   };
 
   const handleEliminarItem = async (detalleId, productoId, pedidoId) => {
-    if (!confirm("¿Eliminar este producto del pedido?")) return;
-    try {
-      // Actualización optimista del modal
-      if (pedidoEditando) {
-        const pedidosActualizados = pedidoEditando.pedidos.map(pedido => {
-          if (pedido.id === pedidoId) {
-            const nuevosDetalles = pedido.detalle_pedidos.filter(d => d.id !== detalleId);
-            const itemEliminado = pedido.detalle_pedidos.find(d => d.id === detalleId);
-            const precioEliminado = itemEliminado ? itemEliminado.cantidad * itemEliminado.precio_unitario : 0;
-            
-            return {
-              ...pedido,
-              detalle_pedidos: nuevosDetalles,
-              total: pedido.total - precioEliminado
-            };
+    pedirConfirmacion(
+      '¿Eliminar este producto del pedido?',
+      async () => {
+        try {
+          if (pedidoEditando) {
+            const pedidosActualizados = pedidoEditando.pedidos.map(pedido => {
+              if (pedido.id === pedidoId) {
+                const nuevosDetalles = pedido.detalle_pedidos.filter(d => d.id !== detalleId);
+                const itemEliminado = pedido.detalle_pedidos.find(d => d.id === detalleId);
+                const precioEliminado = itemEliminado ? itemEliminado.cantidad * itemEliminado.precio_unitario : 0;
+                
+                return {
+                  ...pedido,
+                  detalle_pedidos: nuevosDetalles,
+                  total: pedido.total - precioEliminado
+                };
+              }
+              return pedido;
+            }).filter(p => p.detalle_pedidos.length > 0);
+
+            setPedidoEditando({
+              ...pedidoEditando,
+              pedidos: pedidosActualizados
+            });
+
+            const { tipo, identificador } = pedidoEditando;
+            if (tipo === 'barra') {
+              setPedidosBarra(prev => prev.map(cliente => {
+                if (cliente.cliente === identificador) {
+                  return {
+                    ...cliente,
+                    pedidos: pedidosActualizados,
+                    total: pedidosActualizados.reduce((sum, p) => sum + p.total, 0)
+                  };
+                }
+                return cliente;
+              }).filter(c => c.pedidos.length > 0));
+            } else {
+              setPedidosMesas(prev => prev.map(mesaData => {
+                if (mesaData.mesa.id === identificador) {
+                  return {
+                    ...mesaData,
+                    pedidos: pedidosActualizados,
+                    total: pedidosActualizados.reduce((sum, p) => sum + p.total, 0)
+                  };
+                }
+                return mesaData;
+              }).filter(m => m.pedidos.length > 0));
+            }
+
+            if (pedidosActualizados.length === 0) {
+              setShowEditModal(false);
+            }
           }
-          return pedido;
-        }).filter(p => p.detalle_pedidos.length > 0); // Remover pedidos vacíos
-
-        setPedidoEditando({
-          ...pedidoEditando,
-          pedidos: pedidosActualizados
-        });
-
-        // Actualizar también el estado principal
-        const { tipo, identificador } = pedidoEditando;
-        if (tipo === 'barra') {
-          setPedidosBarra(prev => prev.map(cliente => {
-            if (cliente.cliente === identificador) {
-              return {
-                ...cliente,
-                pedidos: pedidosActualizados,
-                total: pedidosActualizados.reduce((sum, p) => sum + p.total, 0)
-              };
-            }
-            return cliente;
-          }).filter(c => c.pedidos.length > 0));
-        } else {
-          setPedidosMesas(prev => prev.map(mesaData => {
-            if (mesaData.mesa.id === identificador) {
-              return {
-                ...mesaData,
-                pedidos: pedidosActualizados,
-                total: pedidosActualizados.reduce((sum, p) => sum + p.total, 0)
-              };
-            }
-            return mesaData;
-          }).filter(m => m.pedidos.length > 0));
-        }
-
-        // Si no quedan pedidos, cerrar el modal
-        if (pedidosActualizados.length === 0) {
-          setShowEditModal(false);
+          await eliminarItemPedido(detalleId, productoId, null, pedidoId);
+          mostrarToast("Producto eliminado correctamente");
+        } catch (error) {
+          mostrarToast("Error al eliminar el producto", "danger");
+          console.error(error);
+          cargarPedidos();
         }
       }
-      
-      // Luego hacer la llamada a la DB en segundo plano
-      await eliminarItemPedido(detalleId, productoId, null, pedidoId);
-      mostrarToast("Producto eliminado correctamente");
-    } catch (error) {
-      mostrarToast("Error al eliminar el producto", "danger");
-      console.error(error);
-      // Si falla, recargar para recuperar el estado correcto
-      cargarPedidos();
-    }
+    );
   };
 
   const agregarAlCarrito = (producto) => {
@@ -371,6 +382,25 @@ const PedidosActivos = () => {
     // No recargar al cerrar - el estado ya está actualizado
   };
 
+  const ConfirmModal = () => (
+    <Modal show={confirmacion.show} onHide={cancelarConfirmacion} centered>
+      <Modal.Header closeButton>
+        <Modal.Title>{confirmacion.titulo || 'Confirmar'}</Modal.Title>
+      </Modal.Header>
+      <Modal.Body>
+        <p className="mb-0">{confirmacion.mensaje}</p>
+      </Modal.Body>
+      <Modal.Footer>
+        <Button variant="secondary" onClick={cancelarConfirmacion}>
+          Cancelar
+        </Button>
+        <Button variant="danger" onClick={ejecutarConfirmacion}>
+          Aceptar
+        </Button>
+      </Modal.Footer>
+    </Modal>
+  );
+
   if (loading) {
     return (
       <Container fluid className="py-4 d-flex justify-content-center align-items-center" style={{ minHeight: '50vh', backgroundColor: '#f4f6fb' }}>
@@ -428,6 +458,8 @@ const PedidosActivos = () => {
           overflow-y: auto;
         }
       `}</style>
+
+      <ConfirmModal />
 
       <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-4">
         <div>
