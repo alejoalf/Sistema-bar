@@ -68,6 +68,69 @@ export const crearPedido = async (mesaId, items, total, nombreCliente = null) =>
   }
 };
 
+// Agregar productos a un pedido existente (sin generar un pedido nuevo)
+export const agregarItemsAPedido = async (pedidoId, items = []) => {
+  if (!pedidoId || items.length === 0) return null;
+
+  try {
+    const detalles = items.map((item) => ({
+      pedido_id: pedidoId,
+      producto_id: item.id,
+      cantidad: 1,
+      precio_unitario: item.precio
+    }));
+
+    const { error: detalleError } = await supabase
+      .from('detalle_pedidos')
+      .insert(detalles);
+
+    if (detalleError) throw detalleError;
+
+    // Restar stock igual que al crear pedidos
+    for (const item of items) {
+      const { data: producto, error: errorGet } = await supabase
+        .from('productos')
+        .select('stock_actual')
+        .eq('id', item.id)
+        .single();
+
+      if (errorGet) {
+        console.error(`Error obteniendo stock del producto ${item.id}:`, errorGet);
+        continue;
+      }
+
+      const nuevoStock = producto.stock_actual - 1;
+
+      const { error: errorUpdate } = await supabase
+        .from('productos')
+        .update({ stock_actual: nuevoStock })
+        .eq('id', item.id);
+
+      if (errorUpdate) {
+        console.error(`Error actualizando stock del producto ${item.id}:`, errorUpdate);
+      }
+    }
+
+    // Recalcular total del pedido y devolverlo actualizado
+    await recalcularTotalPedido(pedidoId);
+
+    const { data, error } = await supabase
+      .from('pedidos')
+      .select(`
+        id, total, estado, created_at, cliente, mesa_id,
+        detalle_pedidos ( id, pedido_id, producto_id, cantidad, precio_unitario, productos (nombre) )
+      `)
+      .eq('id', pedidoId)
+      .single();
+
+    if (error) return null;
+    return data;
+  } catch (error) {
+    console.error('Error agregando items al pedido:', error);
+    throw error;
+  }
+};
+
 // Obtener cuenta de una mesa
 export const getCuentaMesa = async (mesaId) => {
   const { data, error } = await supabase
@@ -78,7 +141,8 @@ export const getCuentaMesa = async (mesaId) => {
     `)
     .eq('mesa_id', mesaId)
     .neq('estado', 'cobrado')
-    .neq('estado', 'cancelado');
+    .neq('estado', 'cancelado')
+    .order('created_at', { ascending: true });
 
   if (error) return [];
   return data;
@@ -119,7 +183,8 @@ export const getPedidosBarra = async () => {
     `)
     .is('mesa_id', null) 
     .neq('estado', 'cobrado')
-    .neq('estado', 'cancelado');
+    .neq('estado', 'cancelado')
+    .order('created_at', { ascending: true });
 
   if (error) return [];
   return data;

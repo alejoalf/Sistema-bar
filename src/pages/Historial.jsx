@@ -4,13 +4,15 @@ import { FileText, DollarSign, CheckCircle, Calendar, RefreshCw, X, ShoppingBag,
 import { getHistorialVentas } from '../services/pedidos';
 import { getExtracciones } from '../services/caja';
 
-// Normaliza la fecha (YYYY-MM-DD) para comparar días sin hora
-const formatearFecha = (isoString) => {
-  if (!isoString) return '';
-  return new Date(isoString).toISOString().split('T')[0];
+// Normaliza la fecha (YYYY-MM-DD) al día local, evitando desfasajes por timezone
+const fechaLocalISO = (value) => {
+  if (!value) return '';
+  const date = typeof value === 'string' ? new Date(value) : value;
+  const offsetMs = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - offsetMs).toISOString().split('T')[0];
 };
 
-const hoyISO = () => new Date().toISOString().split('T')[0];
+const hoyISO = () => fechaLocalISO(new Date());
 
 const Historial = () => {
   const [ventas, setVentas] = useState([]);
@@ -43,6 +45,11 @@ const Historial = () => {
     cargarHistorial();
   }, []);
 
+  const handleActualizar = () => {
+    setFechaSeleccionada(hoyISO());
+    cargarHistorial();
+  };
+
   const handleVerDetalle = (pedido) => {
     setPedidoSeleccionado(pedido);
     setShowSidebar(true);
@@ -55,20 +62,20 @@ const Historial = () => {
 
   const fechasDisponibles = useMemo(() => {
     const fechas = [
-      ...ventas.map((venta) => formatearFecha(venta.created_at)),
-      ...extracciones.map((ext) => formatearFecha(ext.created_at))
+      ...ventas.map((venta) => fechaLocalISO(venta.created_at)),
+      ...extracciones.map((ext) => fechaLocalISO(ext.created_at))
     ];
     return [...new Set(fechas)];
   }, [ventas, extracciones]);
 
   const ventasFiltradas = useMemo(() => {
     if (!fechaSeleccionada) return ventas;
-    return ventas.filter((venta) => formatearFecha(venta.created_at) === fechaSeleccionada);
+    return ventas.filter((venta) => fechaLocalISO(venta.created_at) === fechaSeleccionada);
   }, [ventas, fechaSeleccionada]);
 
   const extraccionesFiltradas = useMemo(() => {
     if (!fechaSeleccionada) return extracciones;
-    return extracciones.filter((ext) => formatearFecha(ext.created_at) === fechaSeleccionada);
+    return extracciones.filter((ext) => fechaLocalISO(ext.created_at) === fechaSeleccionada);
   }, [extracciones, fechaSeleccionada]);
 
   // Calculamos el total vendido para el día seleccionado
@@ -124,7 +131,7 @@ const Historial = () => {
               </Form.Select>
               <Button 
                 variant="outline-secondary"
-                onClick={cargarHistorial}
+                onClick={handleActualizar}
                 disabled={loading}
                 className="w-100 w-md-auto"
               >

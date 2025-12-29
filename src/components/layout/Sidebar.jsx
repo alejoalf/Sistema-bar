@@ -34,7 +34,7 @@ const Sidebar = () => {
       
       <hr />
       
-      {/* --- PERFIL DE USUARIO (DROPDOWN) --- */}
+      {/* --- PERFIL DE USUARIO  --- */}
       <Dropdown>
         <Dropdown.Toggle variant="dark" id="dropdown-basic" className="d-flex align-items-center w-100 text-white border-0 p-0">
             <div className="bg-secondary rounded-circle d-flex justify-content-center align-items-center me-2" style={{width: 32, height: 32}}>

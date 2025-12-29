@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Container, Row, Col, Card, Badge, Button, Table, Spinner, Modal, ListGroup, Toast, ToastContainer } from 'react-bootstrap';
 import { ClipboardList, RefreshCw, ShoppingBag, Trash2, Edit2, CheckCircle, XCircle, Users } from 'lucide-react';
-import { getPedidosBarra, cobrarClienteBarra, getCuentaMesa, cobrarMesa, eliminarItemPedido, crearPedido, cancelarClienteBarra, cancelarMesa } from '../services/pedidos';
+import { getPedidosBarra, cobrarClienteBarra, getCuentaMesa, cobrarMesa, eliminarItemPedido, cancelarClienteBarra, cancelarMesa, agregarItemsAPedido } from '../services/pedidos';
 import { getMesas } from '../services/mesas';
 import { getProductos } from '../services/productos';
 
@@ -269,41 +269,49 @@ const PedidosActivos = () => {
   };
 
   const handleConfirmarAgregar = async () => {
-    if (carrito.length === 0) return;
+    if (!pedidoEditando || carrito.length === 0) return;
     try {
-      const total = carrito.reduce((sum, item) => sum + item.precio, 0);
+      const totalAgregar = carrito.reduce((sum, item) => sum + item.precio, 0);
       const { tipo, identificador, mesaId } = pedidoEditando;
-      
-      // Crear nuevo pedido optimista
-      const nuevoPedido = {
-        id: `temp-${Date.now()}`, // ID temporal
-        total: total,
-        created_at: new Date().toISOString(),
-        estado: 'pendiente',
-        detalle_pedidos: carrito.map(item => ({
-          id: `temp-${Date.now()}-${item.id}`,
-          producto_id: item.id,
-          cantidad: 1,
-          precio_unitario: item.precio,
-          productos: { nombre: item.nombre }
-        }))
+
+      // Usamos el primer pedido pendiente como contenedor para no crear pedidos separados
+      const pedidoBase = pedidoEditando.pedidos.find(p => p.estado !== 'cobrado') || pedidoEditando.pedidos[0];
+      if (!pedidoBase) return;
+
+      const nuevosDetalles = carrito.map((item, idx) => ({
+        id: `temp-${Date.now()}-${idx}`,
+        pedido_id: pedidoBase.id,
+        producto_id: item.id,
+        cantidad: 1,
+        precio_unitario: item.precio,
+        productos: { nombre: item.nombre }
+      }));
+
+      const pedidoActualizado = {
+        ...pedidoBase,
+        detalle_pedidos: [...(pedidoBase.detalle_pedidos || []), ...nuevosDetalles],
+        total: (pedidoBase.total || 0) + totalAgregar
       };
 
+      const pedidosActualizados = pedidoEditando.pedidos.map(p =>
+        p.id === pedidoBase.id ? pedidoActualizado : p
+      );
+
       // Actualización optimista del modal
-      const pedidosActualizados = [...pedidoEditando.pedidos, nuevoPedido];
       setPedidoEditando({
         ...pedidoEditando,
         pedidos: pedidosActualizados
       });
 
-      // Actualizar estado principal
+      // Actualizar estado principal manteniendo el mismo pedido
       if (tipo === 'barra') {
         setPedidosBarra(prev => prev.map(cliente => {
           if (cliente.cliente === identificador) {
+            const totalCliente = pedidosActualizados.reduce((sum, p) => sum + p.total, 0);
             return {
               ...cliente,
               pedidos: pedidosActualizados,
-              total: cliente.total + total
+              total: totalCliente
             };
           }
           return cliente;
@@ -311,10 +319,11 @@ const PedidosActivos = () => {
       } else {
         setPedidosMesas(prev => prev.map(mesaData => {
           if (mesaData.mesa.id === identificador) {
+            const totalMesa = pedidosActualizados.reduce((sum, p) => sum + p.total, 0);
             return {
               ...mesaData,
               pedidos: pedidosActualizados,
-              total: mesaData.total + total
+              total: totalMesa
             };
           }
           return mesaData;
@@ -323,15 +332,11 @@ const PedidosActivos = () => {
 
       setCarrito([]);
       mostrarToast(`✅ ${carrito.length} producto(s) agregado(s) correctamente`);
-      
-      // Luego hacer la llamada a la DB en segundo plano
-      if (tipo === 'barra') {
-        await crearPedido(null, carrito, total, identificador);
-      } else {
-        await crearPedido(mesaId, carrito, total);
-      }
-      
-      // Recargar solo los datos del pedido editado para obtener IDs reales
+
+      // Persistir agregados en el mismo pedido
+      await agregarItemsAPedido(pedidoBase.id, carrito);
+
+      // Recargar datos del pedido editado para sincronizar IDs reales y totales
       if (tipo === 'barra') {
         const barra = await getPedidosBarra();
         const clientePedidos = barra.filter(p => p.cliente === identificador);
