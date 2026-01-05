@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Modal, Button, Badge, ListGroup, Row, Col, Tab, Tabs, Table, Alert } from 'react-bootstrap';
 import { abrirMesa, cerrarMesa } from '../../services/mesas';
 import { getProductos } from '../../services/productos';
-import { crearPedido, getCuentaMesa, cobrarMesa, cobrarClienteBarra, getCuentaCliente } from '../../services/pedidos';
+import { crearPedido, agregarItemsAPedido, getCuentaMesa, cobrarMesa, cobrarClienteBarra, getCuentaCliente } from '../../services/pedidos';
 import PaymentMethodModal from '../common/PaymentMethodModal';
 
 const PedidoModal = ({ show, onHide, mesa, pedidoBarra, onUpdate }) => {
@@ -69,7 +69,15 @@ const PedidoModal = ({ show, onHide, mesa, pedidoBarra, onUpdate }) => {
       if (esModoBarra) {
           await crearPedido(null, carrito, total, pedidoBarra.cliente);
       } else {
-          await crearPedido(mesa.id, carrito, total);
+          const pedidoAbierto = [...(cuentaHistoria || [])]
+            .reverse()
+            .find((p) => p.estado !== 'cobrado' && p.estado !== 'cancelado');
+
+          if (pedidoAbierto) {
+            await agregarItemsAPedido(pedidoAbierto.id, carrito);
+          } else {
+            await crearPedido(mesa.id, carrito, total);
+          }
       }
       
       onHide(); 
