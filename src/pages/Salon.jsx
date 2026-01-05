@@ -9,6 +9,12 @@ import PaymentMethodModal from '../components/common/PaymentMethodModal';
 import { registrarExtraccion } from '../services/caja';
 
 const Salon = () => {
+  const SECTORES = [
+    { key: 'salon', label: 'Salón', esperado: 10 },
+    { key: 'patio-medio', label: 'Patio del medio', esperado: 6 },
+    { key: 'patio-fondo', label: 'Patio del fondo', esperado: 8 },
+  ];
+
   const [mesas, setMesas] = useState([]);
   const [productos, setProductos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -38,6 +44,14 @@ const Salon = () => {
     cargarDatosIniciales();
   }, []);
 
+  const normalizarMesas = (lista) => {
+    return (lista || []).map((mesa, idx) => ({
+      ...mesa,
+      numero_mesa: mesa.numero_mesa ?? idx + 1,
+      sector: mesa.sector || 'salon',
+    }));
+  };
+
   const cargarDatosIniciales = async () => {
     try {
       setLoading(true);
@@ -45,8 +59,7 @@ const Salon = () => {
         getMesas(),
         getProductos()
       ]);
-
-      setMesas(mesasData || []);
+      setMesas(normalizarMesas(mesasData));
       const disponibles = (productosData || []).filter(prod => prod.disponible !== false);
       setProductos(disponibles);
 
@@ -66,7 +79,7 @@ const Salon = () => {
   const cargarMesas = async () => {
     try {
       const data = await getMesas();
-      setMesas(data || []);
+      setMesas(normalizarMesas(data));
     } catch (error) {
       console.error('Error actualizando mesas:', error);
       setFeedback({ tipo: 'danger', mensaje: 'No se pudieron actualizar las mesas.' });
@@ -98,6 +111,25 @@ const Salon = () => {
     if (!selectedCategory) return productos;
     return productos.filter((producto) => (producto.categoria || 'General') === selectedCategory);
   }, [productos, selectedCategory]);
+
+  const mesasPorSector = useMemo(() => {
+    const agrupado = {
+      salon: [],
+      'patio-medio': [],
+      'patio-fondo': [],
+    };
+
+    (mesas || []).forEach((mesa) => {
+      const clave = mesa.sector || 'salon';
+      if (agrupado[clave]) {
+        agrupado[clave].push(mesa);
+      } else {
+        agrupado.salon.push(mesa);
+      }
+    });
+
+    return agrupado;
+  }, [mesas]);
 
   const totalPedido = useMemo(() => (
     orderItems.reduce((sum, item) => sum + item.precio * item.cantidad, 0)
@@ -438,7 +470,7 @@ const Salon = () => {
                   <option value="barra">Sin Mesa (Barra)</option>
                   {mesas.map((mesa) => (
                     <option value={mesa.id} key={mesa.id}>
-                      Mesa {mesa.numero_mesa}
+                      Mesa {mesa.numero_mesa} · {mesa.sector === 'patio-medio' ? 'Patio medio' : mesa.sector === 'patio-fondo' ? 'Patio fondo' : 'Salón'}
                       {mesa.estado === 'ocupada' ? ' - Ocupada' : ''}
                     </option>
                   ))}
@@ -494,17 +526,34 @@ const Salon = () => {
       <hr className="my-4" />
 
       <div className="d-flex justify-content-between align-items-center mb-3">
-        <h3 className="mb-0">Mesas del Salón</h3>
+        <h3 className="mb-0">Mesas por sector</h3>
         <span className="text-muted">Selecciona una mesa para ver su detalle.</span>
       </div>
 
-      <Row>
-        {mesas.map((mesa) => (
-          <Col key={mesa.id} xs={6} md={4} lg={3} className="mb-4">
-            <MesaCard mesa={mesa} onClick={handleMesaClick} />
-          </Col>
-        ))}
-      </Row>
+      {SECTORES.map((sector) => {
+        const listado = mesasPorSector[sector.key] || [];
+        return (
+          <div key={sector.key} className="mb-4">
+            <div className="d-flex justify-content-between align-items-center mb-2">
+              <h5 className="mb-0">{sector.label}</h5>
+              <small className="text-muted">{listado.length} / {sector.esperado} mesas</small>
+            </div>
+            {listado.length === 0 ? (
+              <Card className="border-0 shadow-sm">
+                <Card.Body className="text-muted">No hay mesas registradas en este sector.</Card.Body>
+              </Card>
+            ) : (
+              <Row>
+                {listado.map((mesa) => (
+                  <Col key={mesa.id} xs={6} md={4} lg={3} className="mb-3">
+                    <MesaCard mesa={mesa} onClick={handleMesaClick} />
+                  </Col>
+                ))}
+              </Row>
+            )}
+          </div>
+        );
+      })}
 
       {/* --- AQUÍ ESTÁ EL MODAL --- */}
       <PedidoModal 
