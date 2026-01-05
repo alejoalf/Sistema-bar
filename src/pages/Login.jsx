@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Container, Card, Form, Button, Alert } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
 import { login } from '../services/auth';
-import { useBarStore } from '../store/useBarStore'; // Usaremos esto en el siguiente paso
+import { useBarStore } from '../store/useBarStore'; 
 
 const Login = () => {
   const navigate = useNavigate();
@@ -18,7 +18,7 @@ const Login = () => {
 
     try {
       await login(email, password);
-      navigate('/'); // Si sale bien, nos manda al Salón
+      navigate('/');
     } catch (err) {
       setError('Credenciales incorrectas. Intenta de nuevo.');
     } finally {
@@ -30,7 +30,7 @@ const Login = () => {
     <Container className="d-flex justify-content-center align-items-center min-vh-100 bg-light">
       <Card style={{ width: '400px' }} className="shadow p-4">
         <Card.Body>
-          <h2 className="text-center mb-4">HorusBar Acceso</h2>
+          <h2 className="text-center mb-4">Angus Bar Acceso</h2>
           
           {error && <Alert variant="danger">{error}</Alert>}
           

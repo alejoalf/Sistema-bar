@@ -7,7 +7,7 @@ const MainNavbar = () => {
       <Container fluid>
         <Navbar.Brand href="/">
           <UtensilsCrossed className="me-2" size={24} />
-          Sistema Bar
+          Angus Bar
         </Navbar.Brand>
         <Navbar.Toggle aria-controls="basic-navbar-nav" />
         <Navbar.Collapse id="basic-navbar-nav">

@@ -34,7 +34,7 @@ const MobileNavbar = () => {
           >
             <Menu size={24} />
           </Button>
-          <Navbar.Brand className="mx-auto fw-bold">HorusBar</Navbar.Brand>
+          <Navbar.Brand className="mx-auto fw-bold">Angus Bar</Navbar.Brand>
           <div style={{ width: '40px' }}></div> {/* Espaciador para centrar */}
         </Container>
       </Navbar>
