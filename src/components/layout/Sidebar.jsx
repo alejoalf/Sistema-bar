@@ -23,8 +23,9 @@ const Sidebar = () => {
       style={{ width: '250px', height: '100vh', position: 'fixed', left: 0, top: 0, zIndex: 1000 }}
     >
       {/* --- MARCA --- */}
-      <a href="/" className="d-flex align-items-center mb-3 mb-md-0 me-md-auto text-white text-decoration-none">
-        <span className="fs-4 fw-bold">Angus Bar</span>
+      <a href="/" className="d-flex align-items-center gap-2 mb-3 mb-md-0 me-md-auto text-white text-decoration-none">
+        <img src="/angus_bar.png" alt="Angus Bar" width={36} height={36} className="rounded" />
+        <span className="fs-5 fw-bold">Angus Bar</span>
       </a>
       
       <hr />

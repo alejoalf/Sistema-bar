@@ -5,8 +5,9 @@ const MainNavbar = () => {
   return (
     <Navbar bg="dark" variant="dark" expand="lg" sticky="top">
       <Container fluid>
-        <Navbar.Brand href="/">
-          <UtensilsCrossed className="me-2" size={24} />
+        <Navbar.Brand href="/" className="d-flex align-items-center gap-2">
+          <img src="/angus_bar.png" alt="Angus Bar" width={28} height={28} className="rounded" />
+          <UtensilsCrossed className="me-1" size={20} />
           Angus Bar
         </Navbar.Brand>
         <Navbar.Toggle aria-controls="basic-navbar-nav" />

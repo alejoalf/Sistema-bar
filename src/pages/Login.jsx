@@ -30,7 +30,10 @@ const Login = () => {
     <Container className="d-flex justify-content-center align-items-center min-vh-100 bg-light">
       <Card style={{ width: '400px' }} className="shadow p-4">
         <Card.Body>
-          <h2 className="text-center mb-4">Angus Bar Acceso</h2>
+          <div className="d-flex flex-column align-items-center mb-4">
+            <img src="/angus_bar.png" alt="Angus Bar" width={96} height={96} className="mb-2" />
+            <h2 className="text-center mb-0">Angus Bar Acceso</h2>
+          </div>
           
           {error && <Alert variant="danger">{error}</Alert>}
           

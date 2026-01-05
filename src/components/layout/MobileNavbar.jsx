@@ -34,7 +34,10 @@ const MobileNavbar = () => {
           >
             <Menu size={24} />
           </Button>
-          <Navbar.Brand className="mx-auto fw-bold">Angus Bar</Navbar.Brand>
+          <Navbar.Brand className="mx-auto d-flex align-items-center gap-2 fw-bold">
+            <img src="/angus_bar.png" alt="Angus Bar" width={28} height={28} className="rounded" />
+            Angus Bar
+          </Navbar.Brand>
           <div style={{ width: '40px' }}></div> {/* Espaciador para centrar */}
         </Container>
       </Navbar>
@@ -47,7 +50,10 @@ const MobileNavbar = () => {
         className="bg-white"
       >
         <Offcanvas.Header closeButton className="bg-dark text-white">
-          <Offcanvas.Title className="fw-bold">HorusBar</Offcanvas.Title>
+          <Offcanvas.Title className="d-flex align-items-center gap-2 fw-bold">
+            <img src="/angus_bar.png" alt="Angus Bar" width={28} height={28} className="rounded" />
+            Angus Bar
+          </Offcanvas.Title>
         </Offcanvas.Header>
         <Offcanvas.Body className="d-flex flex-column">
           {/* Links de Navegación */}
