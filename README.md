@@ -12,22 +12,6 @@ Dashboard completo de gestión para bares con mapa de mesas, gestión de pedidos
 - **Iconos**: Lucide React
 - **Router**: React Router DOM v7
 
-## 📁 Estructura del Proyecto
-
-```
-src/
-├── components/
-│   ├── layout/          # Navbar y componentes de estructura
-│   ├── mesas/           # Componentes relacionados con mesas
-│   └── pedidos/         # Modales y componentes de pedidos
-├── pages/               # Vistas principales (Salón, Cocina, etc)
-├── services/            # Conexión a Supabase
-├── store/               # Estado global con Zustand
-├── App.jsx              # Configuración de rutas
-└── main.jsx             # Punto de entrada
-```
-
-## ⚙️ Configuración Inicial
 
 ### 1. Instalar dependencias
 
@@ -52,13 +36,6 @@ npm run dev
 - Tarjetas de mesa con React Bootstrap
 - Integración con Zustand para selección de mesas
 
-## 🔜 Próximos Pasos
-
-- [ ] Modal de gestión de pedidos
-- [ ] Vista de cocina en tiempo real
-- [ ] Sistema de autenticación con Supabase
-- [ ] Conexión real con base de datos
-- [ ] Panel de administración
 
 ## 📝 Arquitectura
 
