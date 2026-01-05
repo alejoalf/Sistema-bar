@@ -61,11 +61,12 @@ const Historial = () => {
   };
 
   const fechasDisponibles = useMemo(() => {
+    const hoy = hoyISO();
     const fechas = [
       ...ventas.map((venta) => fechaLocalISO(venta.created_at)),
       ...extracciones.map((ext) => fechaLocalISO(ext.created_at))
     ];
-    return [...new Set(fechas)];
+    return [...new Set([hoy, ...fechas])];
   }, [ventas, extracciones]);
 
   const ventasFiltradas = useMemo(() => {
